@@ -28,3 +28,10 @@ hs_err_pid*
 
 #Ignore output folder
 out/
+build/
+
+# Gradle files
+gradle/
+gradlew
+gradlew.bat
+.gradle/

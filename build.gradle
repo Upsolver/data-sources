@@ -1,0 +1,20 @@
+plugins {
+    id 'java'
+}
+
+group 'com.upsolver'
+version '1.0'
+
+sourceCompatibility = 11
+
+repositories {
+    mavenCentral()
+    flatDir {
+        dirs '/tmp/p/'
+    }
+}
+
+dependencies {
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    compile fileTree(dir: '/tmp/p/com/upsolver/interfaces_2.12/0.1.0/', include: '*.jar')
+}
