@@ -91,19 +91,19 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     @Override
-    public CompletionStage<InputStream> getSample() {
-        InputStream result = queryData(0L, 100000L, 100);
+    public CompletionStage<Iterator<byte[]>> getSample() {
+        var result = queryData(0L, 100000L, 100);
         return CompletableFuture.completedFuture(result);
     }
 
-    private InputStream queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
+    private Iterator<byte[]> queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
         String query = "SELECT " + columnNames + " FROM " + tableName + " WHERE " +
                 incrementingColumn + " BETWEEN " + inclusiveStart + " AND " + (exclusiveEnd - 1);
         if (limit > 0) {
             query = query + " limit " + limit;
         }
         try {
-            return new ResultSetInputStream(runQuery(query));
+            return new ResultSetIterator(runQuery(query));
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
         }
@@ -136,11 +136,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
                 @Override
                 public CompletionStage<Iterator<LoadedData>> loadData() {
-                    InputStream stream = queryData(metadata.getStartValue(), metadata.getEndValue(), -1);
+                    var iterator = queryData(metadata.getStartValue(), metadata.getEndValue(), -1);
                     var headers = new HashMap<String, String>();
                     headers.put("startValue", metadata.getStartValue().toString());
                     headers.put("endValue", metadata.getEndValue().toString());
-                    var result = new LoadedData(stream, headers);
+                    var result = new LoadedData(iterator, headers);
                     return CompletableFuture.completedFuture(Collections.singleton(result).iterator());
                 }
 
