@@ -22,4 +22,16 @@ public class JDBCTaskMetadata implements Serializable {
     public Long getEndValue() {
         return endValue;
     }
+
+    public int getItemCount() {
+        return (int)(endValue - startValue);
+    }
+
+
+    public double getItemsPerTask(long taskCount) {
+        if (taskCount <= 0) {
+            return 0;
+        }
+        return Math.max(endValue - startValue, 0) / (double)taskCount;
+    }
 }

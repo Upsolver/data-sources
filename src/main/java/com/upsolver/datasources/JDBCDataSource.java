@@ -2,20 +2,23 @@ package com.upsolver.datasources;
 
 import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
+import com.upsolver.datasources.jdbcutils.NamedPreparedStatment;
 
-import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBCTaskMetadata> {
+
+    private static final Set<Integer> validIncColumn = new HashSet<>(Arrays.asList(Types.BIGINT, Types.INTEGER));
 
     private static final String connectionStringProp = "Connection String";
     private static final String tableNameProp = "Table Name";
@@ -30,6 +33,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private String tableName;
     private String incrementingColumn;
     private String columnNames;
+    private String identifierEscaper;
 
 
     private Connection connection = null;
@@ -57,16 +61,16 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     @Override
     public void setProperties(Map<String, String> properties) {
         connectionString = properties.get(connectionStringProp);
-        tableName = properties.get(tableNameProp);
-        incrementingColumn = properties.get(incrementingColumnNameProp);
-        columnNames = properties.get(columnNamesProp);
+
         userName = properties.get(userNameProp);
         password = properties.get(passwordProp);
 
-
         try {
-            //Class.forName("com.mysql.jdbc.Driver");
             connection = DriverManager.getConnection(connectionString, userName, password);
+            identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
+            tableName = secureIdentifier(properties.get(tableNameProp));
+            incrementingColumn = secureIdentifier(properties.get(incrementingColumnNameProp));
+            columnNames = Arrays.stream(properties.get(columnNamesProp).split(",")).map(x -> secureIdentifier(x)).collect(Collectors.joining(","));
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
         }
@@ -96,101 +100,145 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return CompletableFuture.completedFuture(result);
     }
 
+
     private Iterator<byte[]> queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
-        String query = "SELECT " + columnNames + " FROM " + tableName + " WHERE " +
-                incrementingColumn + " BETWEEN " + inclusiveStart + " AND " + (exclusiveEnd - 1);
+        String query = "SELECT " + columnNames +
+                " FROM " + tableName +
+                " WHERE " + incrementingColumn + " BETWEEN :incStart AND :incEnd";
         if (limit > 0) {
             query = query + " limit " + limit;
         }
         try {
-            return new ResultSetIterator(runQuery(query));
+            var statement = new NamedPreparedStatment(connection, query);
+            statement.setLong("incStart", inclusiveStart);
+            statement.setLong("incEnd", exclusiveEnd - 1);
+            return new ResultSetIterator(statement.executeQuery());
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
         }
     }
 
-    private ResultSet runQuery(String query) {
-        try {
-            Statement stmt = connection.createStatement();
-            return stmt.executeQuery(query);
-        } catch (Exception e) {
-            throw new RuntimeException("Error while reading table", e);
-        }
-    }
 
     @Override
     public List<PropertyError> validate(Map<String, String> properties) {
-        return new ArrayList<>();
+        var connectionString = properties.get(connectionStringProp);
+        var user = properties.get(userNameProp);
+        var pass = properties.get(passwordProp);
+        try (var connection = DriverManager.getConnection(connectionString, user, pass)) {
+            identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
+            return validateTableInfo(connection,
+                    secureIdentifier(properties.get(tableNameProp)),
+                    properties.get(incrementingColumnNameProp),
+                    properties.get(columnNamesProp).split(","));
+        } catch (SQLException e) {
+            return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct."));
+        }
+
     }
 
-    @Override
-    public CompletionStage<List<DataLoader<JDBCTaskMetadata>>> getDataLoaders(List<TaskInformation<JDBCTaskMetadata>> taskInfos) {
-        List<DataLoader<JDBCTaskMetadata>> result = taskInfos.stream().map(t -> {
-            final var metadata = t.getMetadata();
-            final var taskTime = t.getTaskTime();
-            return new DataLoader<JDBCTaskMetadata>() {
-                @Override
-                public Instant getTaskTime() {
-                    return taskTime;
+    private List<PropertyError> validateTableInfo(Connection connection,
+                                                  String tableName,
+                                                  String incColumn,
+                                                  String[] selectColumns) {
+        var result = new ArrayList<PropertyError>();
+        String query = "SELECT * FROM " + tableName + " limit 0";
+        try (var rs = new NamedPreparedStatment(connection, query).executeQuery()) {
+            var metadata = rs.getMetaData();
+            var columnNames = new HashMap<String, Integer>();
+            for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                columnNames.put(metadata.getColumnName(i), i);
+            }
+            for (String col : selectColumns) {
+                var index = columnNames.get(col.trim());
+                if (index == null) {
+                    result.add(new PropertyError(columnNamesProp, "Column '" + col + "' does not exist in the table"));
                 }
-
-                @Override
-                public CompletionStage<Iterator<LoadedData>> loadData() {
-                    var iterator = queryData(metadata.getStartValue(), metadata.getEndValue(), -1);
-                    var headers = new HashMap<String, String>();
-                    headers.put("startValue", metadata.getStartValue().toString());
-                    headers.put("endValue", metadata.getEndValue().toString());
-                    var result = new LoadedData(iterator, headers);
-                    return CompletableFuture.completedFuture(Collections.singleton(result).iterator());
-                }
-
-                @Override
-                public JDBCTaskMetadata getCompletedMetadata() {
-                    return metadata;
-                }
-            };
-        }).collect(Collectors.toList());
-        return CompletableFuture.completedFuture(result);
+            }
+            var incIndex = columnNames.get(incColumn.trim());
+            if (incIndex == null) {
+                result.add(new PropertyError(incrementingColumnNameProp, "Incrementing column '" + incColumn + "' does not exist"));
+            } else if (!validIncColumn.contains(metadata.getColumnType(incIndex))) {
+                result.add(new PropertyError(incrementingColumnNameProp, "Incrementing column must be of type INTEGER or BIGINT"));
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get table info", e);
+        }
+        return result;
     }
 
-    @Override
-    public CompletionStage<List<TaskInformation<JDBCTaskMetadata>>> getTaskInfos(JDBCTaskMetadata previousTaskMetadata,
-                                                                                 List<Instant> taskTimes,
 
-                                                                                 ShardDefinition shard) {
+    @Override
+    public CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> getDataLoaders(TaskInformation<JDBCTaskMetadata> taskInfo,
+                                                                                  List<TaskRange> wantedRanges,
+                                                                                  ShardDefinition shardDefinition) {
+        var taskCount = wantedRanges.size();
+        var itemsPerTask = (taskInfo.getMetadata().getItemsPerTask(taskCount));
+        if (itemsPerTask == 0) {
+            List<DataLoader<JDBCTaskMetadata>> result =
+                    wantedRanges.stream()
+                            .map(t -> new NoDataLoader(t, taskInfo.getMetadata()))
+                            .collect(Collectors.toList());
+            return CompletableFuture.completedFuture(result.iterator());
+        } else {
+            var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
+            var start = (double) taskInfo.getMetadata().getStartValue();
+            var fullDataIterator = queryData(taskInfo.getMetadata().getStartValue(), taskInfo.getMetadata().getEndValue(), -1);
+            for (int i = 0; i < wantedRanges.size(); i++) {
+                final var taskRange = wantedRanges.get(i);
+                var endValue = start + itemsPerTask;
+                // Due to rounding of values make sure the last task gets everything remaining
+                if (i == taskCount - 1) endValue = Math.max(endValue, taskInfo.getMetadata().getEndValue());
+                final var metadata = new JDBCTaskMetadata((long) start, (long) endValue);
+                start = endValue;
+                var loader = new DataLoader<JDBCTaskMetadata>() {
+                    @Override
+                    public TaskRange getTaskRange() {
+                        return taskRange;
+                    }
+
+                    @Override
+                    public Iterator<LoadedData> loadData() {
+                        var headers = new HashMap<String, String>();
+                        headers.put("startValue", metadata.getStartValue().toString());
+                        headers.put("endValue", metadata.getEndValue().toString());
+                        var limitedIterator = new LimitedIterator<byte[]>(fullDataIterator, metadata.getItemCount());
+                        var result = new LoadedData(limitedIterator, headers);
+                        return Collections.singleton(result).iterator();
+                    }
+
+                    @Override
+                    public JDBCTaskMetadata getCompletedMetadata() {
+                        return metadata;
+                    }
+                };
+                result.add(loader);
+            }
+            return CompletableFuture.completedFuture(result.iterator());
+        }
+    }
+
+
+    @Override
+    public CompletionStage<TaskInformation<JDBCTaskMetadata>> getTaskInfo(JDBCTaskMetadata previousTaskMetadata,
+                                                                          TaskRange taskRange,
+                                                                          ShardDefinition shardDefinition) {
         long startFrom = 0L;
         if (previousTaskMetadata != null) startFrom = previousTaskMetadata.getEndValue();
-        String query = "SELECT MIN( + " + incrementingColumn + ") AS min," +
-                " MAX( + " + incrementingColumn + ") - MIN( + " + incrementingColumn + ") AS diff" +
+        String query = "SELECT MIN(" + incrementingColumn + ") AS min," +
+                " MAX(" + incrementingColumn + ") AS max" +
                 " FROM " + tableName +
-                " WHERE " + incrementingColumn + " >= " + startFrom +
+                " WHERE " + incrementingColumn + " >= :startFrom" +
                 " HAVING MIN( " + incrementingColumn + ") IS NOT NULL";
-        int itemsPerTask = 0;
-        try (ResultSet rs = runQuery(query)) {
-            var diff = 0;
-            var min = 0L;
-            var hasData = rs.next();
-            if (hasData) {
-                diff = rs.getInt("diff");
-                min = rs.getLong("min");
-                if (diff > 0 && taskTimes.size() > 0) {
-                    itemsPerTask = diff / taskTimes.size();
-                }
+        try (var statement = new NamedPreparedStatment(connection, query)) {
+            statement.setLong("startFrom", startFrom);
+            var rs = statement.executeQuery();
+            if (rs.next()) {
+                var max = rs.getLong("max");
+                var min = rs.getLong("min");
+                return CompletableFuture.completedFuture(new TaskInformation<>(taskRange, new JDBCTaskMetadata(min, max + 1)));
+            } else {
+                return CompletableFuture.completedFuture(new TaskInformation<>(taskRange, new JDBCTaskMetadata(startFrom, startFrom)));
             }
-            var result = new ArrayList<TaskInformation<JDBCTaskMetadata>>();
-
-            long startValue = Math.max(min, Math.max(startFrom, 0));
-            for (final Instant taskTime : taskTimes) {
-                if (hasData) {
-                    long endValue = startValue + itemsPerTask + 1;
-                    result.add(new TaskInformation<>(taskTime,new JDBCTaskMetadata(startValue, endValue)));
-                    startValue = endValue;
-                } else {
-                    result.add(new TaskInformation<>(taskTime,new JDBCTaskMetadata(startValue, startValue)));
-                }
-            }
-            rs.getStatement().close();
-            return CompletableFuture.completedFuture(result);
         } catch (Exception e) {
             throw new RuntimeException("Failed to get task infos", e);
         }
@@ -202,6 +250,10 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                                     ShardDefinition newShard) {
         var endValue = previousTaskMetadatas.stream().mapToLong(x -> x.getEndValue()).max().orElse(-1L);
         return new JDBCTaskMetadata(endValue, endValue);
+    }
+
+    private String secureIdentifier(String identifier) {
+        return identifierEscaper + identifier.replace(identifierEscaper, identifierEscaper + identifierEscaper) + identifierEscaper;
     }
 }
 
