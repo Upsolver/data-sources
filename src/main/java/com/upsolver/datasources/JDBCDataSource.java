@@ -13,7 +13,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBCTaskMetadata> {
@@ -33,6 +32,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private String tableName;
     private String incrementingColumn;
     private String columnNames;
+    private String originalColumnNames;
     private String identifierEscaper;
 
 
@@ -70,7 +70,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
             tableName = secureIdentifier(properties.get(tableNameProp));
             incrementingColumn = secureIdentifier(properties.get(incrementingColumnNameProp));
-            columnNames = Arrays.stream(properties.get(columnNamesProp).split(",")).map(x -> secureIdentifier(x)).collect(Collectors.joining(","));
+            originalColumnNames = properties.get(columnNamesProp);
+            columnNames = Arrays.stream(originalColumnNames.split(",")).map(x -> secureIdentifier(x)).collect(Collectors.joining(","));
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
         }
@@ -91,7 +92,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     @Override
     public DataSourceContentType getContentType() {
-        return new CSVContentType(true, ',', columnNames, null);
+        return new CSVContentType(true, ',', originalColumnNames, null);
     }
 
     @Override
@@ -112,7 +113,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", inclusiveStart);
             statement.setLong("incEnd", exclusiveEnd - 1);
-            return new ResultSetIterator(statement.executeQuery());
+            return new ResultSetIterator(null, statement.executeQuery());
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
         }

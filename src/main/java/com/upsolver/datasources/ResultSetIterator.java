@@ -1,7 +1,6 @@
 package com.upsolver.datasources;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Iterator;
@@ -9,11 +8,13 @@ import java.util.Iterator;
 public class ResultSetIterator implements Iterator<byte[]> {
     private ResultSet rs;
     private int colCount;
+    private String header;
 
     private boolean didNext = false;
     private boolean hasNext = false;
 
-    public ResultSetIterator(ResultSet rs) throws SQLException {
+    public ResultSetIterator(String header, ResultSet rs) throws SQLException {
+        this.header = header;
         this.rs = rs;
         this.colCount = rs.getMetaData().getColumnCount();
     }
@@ -21,6 +22,7 @@ public class ResultSetIterator implements Iterator<byte[]> {
 
     @Override
     public boolean hasNext() {
+        if (header != null) return true;
         try {
             if (!didNext) {
                 hasNext = rs.next();
@@ -38,6 +40,13 @@ public class ResultSetIterator implements Iterator<byte[]> {
     @Override
     public byte[] next() {
         try {
+            if (header != null) {
+                var byteArrayOutputStream = new ByteArrayOutputStream();
+                byteArrayOutputStream.write(header.getBytes());
+                byteArrayOutputStream.write('\n');
+                header = null;
+                return byteArrayOutputStream.toByteArray();
+            }
             if (!didNext) {
                 rs.next();
             }
