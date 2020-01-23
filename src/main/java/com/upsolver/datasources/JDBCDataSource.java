@@ -4,10 +4,7 @@ import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
 import com.upsolver.datasources.jdbcutils.NamedPreparedStatment;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -40,22 +37,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     @Override
     public DataSourceDescription getDataSourceDescription() {
-        return new DataSourceDescription() {
-            @Override
-            public String getName() {
-                return "JDBC";
-            }
-
-            @Override
-            public String getDescription() {
-                return "Read data from and JDBC compliant source";
-            }
-
-            @Override
-            public int getMaxShards() {
-                return 1;
-            }
-        };
+        return new JDBCDataSourceDescription();
     }
 
     @Override
@@ -96,13 +78,15 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     @Override
-    public CompletionStage<Iterator<byte[]>> getSample() {
+    public CompletionStage<LoadedData> getSample() {
         var result = queryData(0L, 100000L, 100);
-        return CompletableFuture.completedFuture(result);
+        var inputStream = new ResultSetInputStream(result, Integer.MAX_VALUE);
+        var loadedData = new LoadedData(inputStream, new HashMap<>());
+        return CompletableFuture.completedFuture(loadedData);
     }
 
 
-    private Iterator<byte[]> queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
+    private ResultSet queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
         String query = "SELECT " + columnNames +
                 " FROM " + tableName +
                 " WHERE " + incrementingColumn + " BETWEEN :incStart AND :incEnd";
@@ -113,7 +97,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", inclusiveStart);
             statement.setLong("incEnd", exclusiveEnd - 1);
-            return new ResultSetIterator(null, statement.executeQuery());
+            return statement.executeQuery();
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
         }
@@ -183,7 +167,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         } else {
             var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
             var start = (double) taskInfo.getMetadata().getStartValue();
-            var fullDataIterator = queryData(taskInfo.getMetadata().getStartValue(), taskInfo.getMetadata().getEndValue(), -1);
+            var resultSet = queryData(taskInfo.getMetadata().getStartValue(), taskInfo.getMetadata().getEndValue(), -1);
             for (int i = 0; i < wantedRanges.size(); i++) {
                 final var taskRange = wantedRanges.get(i);
                 var endValue = start + itemsPerTask;
@@ -202,8 +186,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                         var headers = new HashMap<String, String>();
                         headers.put("startValue", metadata.getStartValue().toString());
                         headers.put("endValue", metadata.getEndValue().toString());
-                        var limitedIterator = new LimitedIterator<byte[]>(fullDataIterator, metadata.getItemCount());
-                        var result = new LoadedData(limitedIterator, headers);
+                        var inputStream = new ResultSetInputStream(resultSet, metadata.getItemCount());
+                        var result = new LoadedData(inputStream, headers);
                         return Collections.singleton(result).iterator();
                     }
 
@@ -255,6 +239,29 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private String secureIdentifier(String identifier) {
         return identifierEscaper + identifier.replace(identifierEscaper, identifierEscaper + identifierEscaper) + identifierEscaper;
+    }
+
+    private static class JDBCDataSourceDescription implements DataSourceDescription {
+        @Override
+        public String getName() {
+            return "JDBC";
+        }
+
+        @Override
+        public String getDescription() {
+            return "Read data from and JDBC compliant source";
+        }
+
+        @Override
+        public String getLongDescription() {
+            return "Create a new Data Source able to read streaming data from JDBC sources." +
+                    "\nThe table must contain an Auto-Incrementing column, which will be used to ensure exacly once processing.";
+        }
+
+        @Override
+        public int getMaxShards() {
+            return 1;
+        }
     }
 }
 
