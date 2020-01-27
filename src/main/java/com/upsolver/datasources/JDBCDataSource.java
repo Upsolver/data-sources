@@ -41,6 +41,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     @Override
+    public int getMaxShards() {
+        return 1;
+    }
+
+    @Override
     public void setProperties(Map<String, String> properties) {
         connectionString = properties.get(connectionStringProp);
 
@@ -81,7 +86,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public CompletionStage<LoadedData> getSample() {
         var result = queryData(0L, 100000L, 100);
         var inputStream = new ResultSetInputStream(result, Integer.MAX_VALUE);
-        var loadedData = new LoadedData(inputStream, new HashMap<>());
+        var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
     }
 
@@ -187,7 +192,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                         headers.put("startValue", metadata.getStartValue().toString());
                         headers.put("endValue", metadata.getEndValue().toString());
                         var inputStream = new ResultSetInputStream(resultSet, metadata.getItemCount());
-                        var result = new LoadedData(inputStream, headers);
+                        var result = new LoadedData(inputStream, headers, taskRange.getInclusiveStartTime());
                         return Collections.singleton(result).iterator();
                     }
 
@@ -258,10 +263,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     "\nThe table must contain an Auto-Incrementing column, which will be used to ensure exacly once processing.";
         }
 
-        @Override
-        public int getMaxShards() {
-            return 1;
-        }
     }
 }
 
