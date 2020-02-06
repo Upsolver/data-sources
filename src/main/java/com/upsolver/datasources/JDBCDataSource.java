@@ -121,7 +121,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     properties.get(incrementingColumnNameProp),
                     properties.get(columnNamesProp).split(","));
         } catch (SQLException e) {
-            return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct."));
+            return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct.\n" +
+                    "SqlError: " + e.getMessage()));
         }
 
     }
