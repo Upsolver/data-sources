@@ -19,7 +19,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String connectionStringProp = "Connection String";
     private static final String tableNameProp = "Table Name";
     private static final String incrementingColumnNameProp = "Incrementing Column";
-    private static final String columnNamesProp = "Column Names";
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
 
@@ -28,8 +27,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private String password;
     private String tableName;
     private String incrementingColumn;
-    private String columnNames;
-    private String originalColumnNames;
     private String identifierEscaper;
 
 
@@ -57,8 +54,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
             tableName = secureIdentifier(properties.get(tableNameProp));
             incrementingColumn = secureIdentifier(properties.get(incrementingColumnNameProp));
-            originalColumnNames = properties.get(columnNamesProp);
-            columnNames = Arrays.stream(originalColumnNames.split(",")).map(x -> secureIdentifier(x)).collect(Collectors.joining(","));
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
         }
@@ -72,14 +67,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         result.add(new SimplePropertyDescription(userNameProp, "The user name to connect with", false));
         result.add(new SimplePropertyDescription(passwordProp, "The password to connect with", false, true));
         result.add(new SimplePropertyDescription(tableNameProp, "The name of the table to read from", false));
-        result.add(new SimplePropertyDescription(columnNamesProp, "The names of the columns to load", false));
         result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", false));
         return result;
     }
 
     @Override
     public DataSourceContentType getContentType() {
-        return new CSVContentType(true, ',', originalColumnNames, null);
+        return new CSVContentType(true, ',', null, null);
     }
 
     @Override
@@ -92,7 +86,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
 
     private ResultSet queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
-        String query = "SELECT " + columnNames +
+        String query = "SELECT *" +
                 " FROM " + tableName +
                 " WHERE " + incrementingColumn + " BETWEEN :incStart AND :incEnd";
         if (limit > 0) {
@@ -118,8 +112,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
             return validateTableInfo(connection,
                     secureIdentifier(properties.get(tableNameProp)),
-                    properties.get(incrementingColumnNameProp),
-                    properties.get(columnNamesProp).split(","));
+                    properties.get(incrementingColumnNameProp));
         } catch (SQLException e) {
             return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct.\n" +
                     "SqlError: " + e.getMessage()));
@@ -129,8 +122,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private List<PropertyError> validateTableInfo(Connection connection,
                                                   String tableName,
-                                                  String incColumn,
-                                                  String[] selectColumns) {
+                                                  String incColumn) {
         var result = new ArrayList<PropertyError>();
         String query = "SELECT * FROM " + tableName + " limit 0";
         try (var rs = new NamedPreparedStatment(connection, query).executeQuery()) {
@@ -138,12 +130,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             var columnNames = new HashMap<String, Integer>();
             for (int i = 1; i <= metadata.getColumnCount(); i++) {
                 columnNames.put(metadata.getColumnName(i), i);
-            }
-            for (String col : selectColumns) {
-                var index = columnNames.get(col.trim());
-                if (index == null) {
-                    result.add(new PropertyError(columnNamesProp, "Column '" + col + "' does not exist in the table"));
-                }
             }
             var incIndex = columnNames.get(incColumn.trim());
             if (incIndex == null) {
@@ -247,28 +233,5 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return identifierEscaper + identifier.replace(identifierEscaper, identifierEscaper + identifierEscaper) + identifierEscaper;
     }
 
-    private static class JDBCDataSourceDescription implements DataSourceDescription {
-        @Override
-        public String getName() {
-            return "JDBC";
-        }
-
-        @Override
-        public String getDescription() {
-            return "Read data from and JDBC compliant source";
-        }
-
-        @Override
-        public String getLongDescription() {
-            return "Create a new Data Source able to read streaming data from JDBC sources." +
-                    "\nThe table must contain an Auto-Incrementing column, which will be used to ensure exacly once processing.";
-        }
-
-        @Override
-        public String getIconResourceName() {
-            return "jdbc-logo.svg";
-        }
-
-    }
 }
 
