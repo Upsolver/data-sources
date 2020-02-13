@@ -1,43 +1,40 @@
 package com.upsolver.datasources.jdbc;
 
+import com.upsolver.datasources.jdbc.metadata.TableInfo;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 
 public class ResultSetInputStream extends InputStream {
-    private ResultSet rs;
-    private ResultSetReadLimiter limiter;
-    private int colCount;
+    private TableInfo tableInfo;
+    private final RowReader rowReader;
 
     private byte[] buffer;
     private int position;
     private boolean wroteHeader = false;
+    private boolean closeStream;
 
-    public ResultSetInputStream(ResultSet rs, int readLimit) {
-        this.rs = rs;
-        this.limiter = new ResultSetReadLimiter(rs, readLimit);
-        try {
-            this.colCount = rs.getMetaData().getColumnCount();
-        } catch (SQLException e) {
-            throw new RuntimeException("Failed to get column count. " + e.getMessage(), e);
-        }
+    public ResultSetInputStream(TableInfo tableInfo, RowReader rowReader, boolean closeStream) {
+        this.tableInfo = tableInfo;
+        this.rowReader = rowReader;
+        this.closeStream = closeStream;
     }
 
     private boolean ensureBuffer() throws SQLException, IOException {
         if (buffer != null && position < buffer.length) {
             return true;
         } else {
-            if (limiter.next()) {
+            if (rowReader.next()) {
                 var byteArrayOutputStream = new ByteArrayOutputStream();
                 if (!wroteHeader) {
                     writeHeader(byteArrayOutputStream);
                     wroteHeader = true;
                 }
-                for (int i = 0; i < colCount; i++) {
-                    byteArrayOutputStream.write(rs.getString(i + 1).getBytes()); // Column indices start at 1 (☉_☉)
+                String[] values = rowReader.getValues();
+                for (int i = 0; i < values.length; i++) {
+                    byteArrayOutputStream.write(values[i].getBytes());
                     writeCommaOrNewLine(byteArrayOutputStream, i);
                 }
                 byteArrayOutputStream.close();
@@ -50,17 +47,17 @@ public class ResultSetInputStream extends InputStream {
     }
 
     private void writeCommaOrNewLine(ByteArrayOutputStream byteArrayOutputStream, int i) {
-        if (i < colCount - 1) {
+        if (i < tableInfo.getColumnCount() - 1) {
             byteArrayOutputStream.write(',');
         } else {
             byteArrayOutputStream.write('\n');
         }
     }
 
-    private void writeHeader(ByteArrayOutputStream byteArrayOutputStream) throws SQLException, IOException {
-        ResultSetMetaData metadata = rs.getMetaData();
-        for (int i = 0; i < colCount; i++) {
-            byteArrayOutputStream.write(metadata.getColumnName(i + 1).getBytes());
+    private void writeHeader(ByteArrayOutputStream byteArrayOutputStream) throws IOException {
+        String[] columns = tableInfo.getColumns();
+        for (int i = 0; i < columns.length; i++) {
+            byteArrayOutputStream.write(columns[i].getBytes());
             writeCommaOrNewLine(byteArrayOutputStream, i);
         }
     }
@@ -97,8 +94,10 @@ public class ResultSetInputStream extends InputStream {
     @Override
     public void close() throws IOException {
         try {
-            rs.close();
-        } catch (SQLException e) {
+            if (closeStream){
+                rowReader.close();
+            }
+        } catch (Exception e) {
             throw new IOException(e);
         }
     }
