@@ -1,8 +1,9 @@
-package com.upsolver.datasources;
+package com.upsolver.datasources.jdbc;
 
 import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
-import com.upsolver.datasources.jdbcutils.NamedPreparedStatment;
+import com.upsolver.datasources.jdbc.metadata.TableInfo;
+import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.*;
 import java.time.Instant;
@@ -11,10 +12,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
-
 public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBCTaskMetadata> {
 
-    private static final Set<Integer> validIncColumn = new HashSet<>(Arrays.asList(Types.BIGINT, Types.INTEGER));
+    private static final Set<Integer> validIncColumnTypes = new HashSet<>(Arrays.asList(Types.BIGINT, Types.INTEGER));
 
     private static final String connectionStringProp = "Connection String";
     private static final String tableNameProp = "Table Name";
@@ -22,13 +22,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
 
+
     private String connectionString;
     private String userName;
     private String password;
-    private String tableName;
     private String incrementingColumn;
     private String identifierEscaper;
-
+    private TableInfo tableInfo;
 
     private Connection connection = null;
 
@@ -45,18 +45,42 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     @Override
     public void setProperties(Map<String, String> properties) {
         connectionString = properties.get(connectionStringProp);
-
         userName = properties.get(userNameProp);
         password = properties.get(passwordProp);
 
         try {
             connection = DriverManager.getConnection(connectionString, userName, password);
-            identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
-            tableName = secureIdentifier(properties.get(tableNameProp));
-            incrementingColumn = secureIdentifier(properties.get(incrementingColumnNameProp));
+            DatabaseMetaData metadata = connection.getMetaData();
+            identifierEscaper = metadata.getIdentifierQuoteString();
+            String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
+            tableInfo = loadTableInfo(metadata, properties.get(tableNameProp));
+            if (userProvidedIncColumn == null) {
+                var columns = metadata.getColumns(tableInfo.getCatalog(), tableInfo.getSchema(), tableInfo.getName(), null);
+                while (incrementingColumn == null && columns.next()) {
+                    if (isAutoInc(columns)) {
+                        incrementingColumn = columns.getString("COLUMN_NAME");
+                    }
+                }
+            } else {
+                incrementingColumn = secureIdentifier(userProvidedIncColumn);
+            }
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
         }
+    }
+
+    private boolean isAutoInc(ResultSet columns) throws SQLException {
+        return "yes".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT"));
+    }
+
+    private TableInfo loadTableInfo(DatabaseMetaData metadata, String tableName) throws SQLException {
+        var tables = metadata.getTables(null, null, tableName, new String[]{"TABLE"});
+        if (tables.next()) {
+            return new TableInfo(tables.getString(1), tables.getString(2), tables.getString(3));
+        } else {
+            throw new IllegalArgumentException("Could not find table with name: " + tableName);
+        }
+
     }
 
 
@@ -67,7 +91,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         result.add(new SimplePropertyDescription(userNameProp, "The user name to connect with", false));
         result.add(new SimplePropertyDescription(passwordProp, "The password to connect with", false, true));
         result.add(new SimplePropertyDescription(tableNameProp, "The name of the table to read from", false));
-        result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", false));
+        result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", true));
         return result;
     }
 
@@ -87,7 +111,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private ResultSet queryData(Long inclusiveStart, Long exclusiveEnd, int limit) {
         String query = "SELECT *" +
-                " FROM " + tableName +
+                " FROM " + tableInfo.getName() +
                 " WHERE " + incrementingColumn + " BETWEEN :incStart AND :incEnd";
         if (limit > 0) {
             query = query + " limit " + limit;
@@ -124,19 +148,22 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                                                   String tableName,
                                                   String incColumn) {
         var result = new ArrayList<PropertyError>();
-        String query = "SELECT * FROM " + tableName + " limit 0";
-        try (var rs = new NamedPreparedStatment(connection, query).executeQuery()) {
-            var metadata = rs.getMetaData();
-            var columnNames = new HashMap<String, Integer>();
-            for (int i = 1; i <= metadata.getColumnCount(); i++) {
-                columnNames.put(metadata.getColumnName(i), i);
+
+        try {
+            var columns = connection.getMetaData().getColumns(null, null, tableName, null);
+            var columnNames = new HashMap<String, Boolean>();
+            while (columns.next()){
+                columnNames.put(columns.getString("COLUMN_NAME"), isAutoInc(columns));
             }
-            var incIndex = columnNames.get(incColumn.trim());
-            if (incIndex == null) {
-                result.add(new PropertyError(incrementingColumnNameProp, "Incrementing column '" + incColumn + "' does not exist"));
-            } else if (!validIncColumn.contains(metadata.getColumnType(incIndex))) {
-                result.add(new PropertyError(incrementingColumnNameProp, "Incrementing column must be of type INTEGER or BIGINT"));
+            if (incColumn != null) {
+                var autoInc = columnNames.get(incColumn.trim());
+                if (autoInc == null){
+                    result.add(new PropertyError(incrementingColumnNameProp, "Could not find increment column " + incColumn));
+                } else if (!autoInc) {
+                    result.add(new PropertyError(incrementingColumnNameProp, "Column " + incColumn + " is not an auto-inc column"));
+                }
             }
+
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get table info", e);
         }
@@ -203,7 +230,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         if (previousTaskMetadata != null) startFrom = previousTaskMetadata.getEndValue();
         String query = "SELECT MIN(" + incrementingColumn + ") AS min," +
                 " MAX(" + incrementingColumn + ") AS max" +
-                " FROM " + tableName +
+                " FROM " + tableInfo.getName() +
                 " WHERE " + incrementingColumn + " >= :startFrom" +
                 " HAVING MIN( " + incrementingColumn + ") IS NOT NULL";
         try (var statement = new NamedPreparedStatment(connection, query)) {

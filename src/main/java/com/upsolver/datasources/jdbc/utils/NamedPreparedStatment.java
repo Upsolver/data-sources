@@ -1,4 +1,4 @@
-package com.upsolver.datasources.jdbcutils;
+package com.upsolver.datasources.jdbc.utils;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

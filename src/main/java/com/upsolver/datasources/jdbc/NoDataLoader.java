@@ -1,4 +1,4 @@
-package com.upsolver.datasources;
+package com.upsolver.datasources.jdbc;
 
 import com.upsolver.common.datasources.DataLoader;
 import com.upsolver.common.datasources.LoadedData;
