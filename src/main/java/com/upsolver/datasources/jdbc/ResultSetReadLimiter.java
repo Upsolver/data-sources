@@ -1,4 +1,4 @@
-package com.upsolver.datasources;
+package com.upsolver.datasources.jdbc;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
