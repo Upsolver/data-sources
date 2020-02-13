@@ -1,35 +1,37 @@
 package com.upsolver.datasources.jdbc.utils;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.regex.MatchResult;
+import java.util.regex.Pattern;
 
 public class NamedPreparedStatment implements AutoCloseable {
+    static final private Pattern namedVariable = Pattern.compile(":(\\w+)");
+
     private PreparedStatement prepStmt;
     private Map<String, List<Integer>> fields = new HashMap<>();
 
     public NamedPreparedStatment(Connection conn, String sql) throws SQLException {
-        int pos;
-        var index = 1;
-        while((pos = sql.indexOf(":")) != -1) {
-            int end = sql.substring(pos).indexOf(" ");
-            if (end == -1)
-                end = sql.length();
-            else
-                end += pos;
-            var name = sql.substring(pos+1,end);
-            fields.putIfAbsent(name, new ArrayList<>());
-            var list = fields.get(name);
-            list.add(index);
-            index += 1;
-            sql = sql.substring(0, pos) + "?" + sql.substring(end);
-        }
-        prepStmt = conn.prepareStatement(sql);
+        var finalSql = namedVariable.matcher(sql).replaceAll(new Function<>() {
+            private int index = 1;
+
+            @Override
+            public String apply(MatchResult matchResult) {
+                var name = matchResult.group(1);
+                fields.putIfAbsent(name, new ArrayList<>());
+                var list = fields.get(name);
+                list.add(index);
+                index += 1;
+                return "?";
+            }
+        });
+
+        prepStmt = conn.prepareStatement(finalSql);
     }
 
 
@@ -56,6 +58,13 @@ public class NamedPreparedStatment implements AutoCloseable {
     public void setLong(String name, long value) throws SQLException {
         for (int i : getIndices(name)) {
             prepStmt.setLong(i, value);
+        }
+    }
+
+    public void setTime(String name, Instant time) throws SQLException {
+        var timestamp = Timestamp.from(time);
+        for (int i: getIndices(name)) {
+            prepStmt.setTimestamp(i, timestamp);
         }
     }
 
