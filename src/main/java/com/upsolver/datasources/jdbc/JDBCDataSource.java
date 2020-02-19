@@ -153,12 +153,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         try {
             if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
-                    return queryBuilder.queryWithIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
+                    return queryBuilder.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
                 } else {
-                    throw new UnsupportedOperationException("TODO:");
+                    return this.queryBuilder.queryByTime(this.tableInfo, metadata, limit, this.connection).executeQuery();
                 }
             } else {
-                return queryBuilder.queryWithInc(tableInfo, metadata, limit, connection).executeQuery();
+                return queryBuilder.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
             }
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
@@ -224,7 +224,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var taskCount = wantedRanges.size();
         var itemsPerTask = (taskInfo.getMetadata().itemsPerTask(taskCount));
         var previous = previousSuccessful != null ? previousSuccessful : new JDBCTaskMetadata(0, 0);
-        if (itemsPerTask == 0) {
+        if (tableInfo.hasIncColumn() && itemsPerTask == 0) {
             List<DataLoader<JDBCTaskMetadata>> result =
                     wantedRanges.stream()
                             .map(t -> new NoDataLoader(t, previous))
@@ -349,8 +349,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         try (var statement = getTaskInfoQuery(previous, taskRange)) {
             var rs = statement.executeQuery();
             if (rs.next()) {
-                var max = rs.getLong("max");
-                var min = rs.getLong("min");
+                var max = tableInfo.hasIncColumn() ? rs.getLong("max") : 0;
+                var min = tableInfo.hasIncColumn() ? rs.getLong("min") : 0;
                 var endTime = tableInfo.hasTimeColumns() ? taskRange.getExclusiveEndTime() : null;
                 return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
                         new JDBCTaskMetadata(min, max + 1, previous.getEndTime(), endTime)));
@@ -365,16 +365,14 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private NamedPreparedStatment getTaskInfoQuery(JDBCTaskMetadata metadata, TaskRange taskRange) throws SQLException {
         if (tableInfo.hasTimeColumns()) {
+            Instant maxTime = toQueryTime(taskRange.getExclusiveEndTime());
             if (tableInfo.getIncColumn() != null) {
-                return queryBuilder.taskInfoQueryIncAndTime(tableInfo,
-                        metadata,
-                        toQueryTime(taskRange.getExclusiveEndTime()),
-                        connection);
+                return queryBuilder.taskInfoByIncAndTime(tableInfo, metadata, maxTime, connection);
             } else {
-                throw new UnsupportedOperationException("TODO:...");
+                return queryBuilder.taskInfoByTime(tableInfo, metadata, maxTime, connection);
             }
         } else {
-            return queryBuilder.taskInfoQueryInc(tableInfo, metadata, connection);
+            return queryBuilder.taskInfoByInc(tableInfo, metadata, connection);
         }
     }
 

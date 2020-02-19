@@ -18,9 +18,9 @@ public class DefaultQueryBuilder implements QueryBuilder {
 
 
     @Override
-    public NamedPreparedStatment taskInfoQueryInc(TableInfo tableInfo,
-                                                  JDBCTaskMetadata metadata,
-                                                  Connection connection) throws SQLException {
+    public NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
+                                               JDBCTaskMetadata metadata,
+                                               Connection connection) throws SQLException {
         String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
                 " MAX(" + tableInfo.getIncColumn() + ") AS max" +
                 " FROM " + tableInfo.getName() +
@@ -32,10 +32,27 @@ public class DefaultQueryBuilder implements QueryBuilder {
     }
 
     @Override
-    public NamedPreparedStatment taskInfoQueryIncAndTime(TableInfo tableInfo,
-                                                         JDBCTaskMetadata metadata,
-                                                         Instant maxTime,
-                                                         Connection connection) throws SQLException {
+    public NamedPreparedStatment taskInfoByTime(TableInfo tableInfo,
+                                                JDBCTaskMetadata metadata,
+                                                Instant maxTime,
+                                                Connection connection) throws SQLException {
+        String coalescedTimes = coalesce(tableInfo.getTimeColumnsAsString());
+        String query = "SELECT MAX(" + coalescedTimes + ") AS last_time" +
+                " FROM " + tableInfo.getName() +
+                " WHERE " + coalescedTimes + " < :maxTime" +
+                " AND " + coalescedTimes + " > :startTime" +
+                " HAVING MAX( " + coalescedTimes  + ") IS NOT NULL";
+        var statement = new NamedPreparedStatment(connection, query);
+        statement.setTime("startTime", metadata.getEndTime());
+        statement.setTime("maxTime", maxTime);
+        return statement;
+    }
+
+    @Override
+    public NamedPreparedStatment taskInfoByIncAndTime(TableInfo tableInfo,
+                                                      JDBCTaskMetadata metadata,
+                                                      Instant maxTime,
+                                                      Connection connection) throws SQLException {
         String coalescedTimes = coalesce(tableInfo.getTimeColumnsAsString());
         String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
                 " MAX(" + tableInfo.getIncColumn() + ") AS max," +
@@ -53,10 +70,10 @@ public class DefaultQueryBuilder implements QueryBuilder {
     }
 
     @Override
-    public NamedPreparedStatment queryWithIncAndTime(TableInfo tableInfo,
-                                                     JDBCTaskMetadata metadata,
-                                                     int limit,
-                                                     Connection connection) throws SQLException {
+    public NamedPreparedStatment queryByIncAndTime(TableInfo tableInfo,
+                                                   JDBCTaskMetadata metadata,
+                                                   int limit,
+                                                   Connection connection) throws SQLException {
         String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
         String query = "SELECT *" +
                 " FROM " + tableInfo.getName() +
@@ -70,7 +87,7 @@ public class DefaultQueryBuilder implements QueryBuilder {
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", metadata.getInclusiveStart());
-            statement.setLong("incEnd", metadata.getExclusiveEnd()- 1);
+            statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
             statement.setTime("startTime", metadata.getStartTime());
             statement.setTime("endTime", metadata.getEndTime());
             return statement;
@@ -80,10 +97,34 @@ public class DefaultQueryBuilder implements QueryBuilder {
     }
 
     @Override
-    public NamedPreparedStatment queryWithInc(TableInfo tableInfo,
-                                              JDBCTaskMetadata metadata,
-                                              int limit,
-                                              Connection connection) throws SQLException {
+    public NamedPreparedStatment queryByTime(TableInfo tableInfo,
+                                             JDBCTaskMetadata metadata,
+                                             int limit,
+                                             Connection connection) throws SQLException {
+        String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
+        String query = "SELECT *" +
+                " FROM " + tableInfo.getName() +
+                " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
+                " ORDER BY " + coalesce + " ASC" +
+                "";
+        if (limit > 0) {
+            query = query + " limit " + limit;
+        }
+        try {
+            var statement = new NamedPreparedStatment(connection, query);
+            statement.setTime("startTime", metadata.getStartTime());
+            statement.setTime("endTime", metadata.getEndTime());
+            return statement;
+        } catch (Exception e) {
+            throw new RuntimeException("Error while reading table", e);
+        }
+    }
+
+    @Override
+    public NamedPreparedStatment queryByInc(TableInfo tableInfo,
+                                            JDBCTaskMetadata metadata,
+                                            int limit,
+                                            Connection connection) throws SQLException {
         String query = "SELECT *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd";
@@ -93,7 +134,7 @@ public class DefaultQueryBuilder implements QueryBuilder {
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", metadata.getInclusiveStart());
-            statement.setLong("incEnd", metadata.getExclusiveEnd()- 1);
+            statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
             return statement;
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
@@ -109,7 +150,7 @@ public class DefaultQueryBuilder implements QueryBuilder {
         return "SELECT CURRENT_TIMESTAMP";
     }
 
-    private String coalesce(String columns)  {
+    private String coalesce(String columns) {
         return "COALESCE(" + columns + ")";
     }
 }
