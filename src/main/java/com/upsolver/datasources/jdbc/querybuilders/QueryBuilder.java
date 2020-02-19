@@ -13,24 +13,34 @@ public interface QueryBuilder {
 
     PreparedStatement utcOffset(Connection connection) throws SQLException;
 
-    NamedPreparedStatment taskInfoQueryInc(TableInfo tableInfo,
-                                           JDBCTaskMetadata metadata,
-                                           Connection connection) throws SQLException;
+    NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
+                                        JDBCTaskMetadata metadata,
+                                        Connection connection) throws SQLException;
 
-    NamedPreparedStatment taskInfoQueryIncAndTime(TableInfo tableInfo,
-                                                  JDBCTaskMetadata metadata,
-                                                  Instant maxTime,
-                                                  Connection connection) throws SQLException;
+    NamedPreparedStatment taskInfoByTime(TableInfo tableInfo,
+                                               JDBCTaskMetadata metadata,
+                                               Instant maxTime,
+                                               Connection connection) throws SQLException;
 
-    NamedPreparedStatment queryWithIncAndTime(TableInfo tableInfo,
-                                              JDBCTaskMetadata metadata,
-                                              int limit,
-                                              Connection connection) throws SQLException;
+    NamedPreparedStatment taskInfoByIncAndTime(TableInfo tableInfo,
+                                               JDBCTaskMetadata metadata,
+                                               Instant maxTime,
+                                               Connection connection) throws SQLException;
 
-    NamedPreparedStatment queryWithInc(TableInfo tableInfo,
-                                       JDBCTaskMetadata metadata,
-                                       int limit,
-                                       Connection connection) throws SQLException;
+    NamedPreparedStatment queryByIncAndTime(TableInfo tableInfo,
+                                            JDBCTaskMetadata metadata,
+                                            int limit,
+                                            Connection connection) throws SQLException;
+
+    NamedPreparedStatment queryByTime(TableInfo tableInfo,
+                                            JDBCTaskMetadata metadata,
+                                            int limit,
+                                            Connection connection) throws SQLException;
+
+    NamedPreparedStatment queryByInc(TableInfo tableInfo,
+                                     JDBCTaskMetadata metadata,
+                                     int limit,
+                                     Connection connection) throws SQLException;
 
     PreparedStatement getCurrentTimestamp(Connection connection) throws SQLException;
 
