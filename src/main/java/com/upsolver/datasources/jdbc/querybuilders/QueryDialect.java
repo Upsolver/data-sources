@@ -9,9 +9,9 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 
-public interface QueryBuilder {
+public interface QueryDialect {
 
-    PreparedStatement utcOffset(Connection connection) throws SQLException;
+    long utcOffset(Connection connection) throws SQLException;
 
     NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
                                         JDBCTaskMetadata metadata,
