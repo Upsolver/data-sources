@@ -9,11 +9,13 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Instant;
 
-public class DefaultQueryBuilder implements QueryBuilder {
+public class DefaultQueryDialect implements QueryDialect {
 
     @Override
-    public PreparedStatement utcOffset(Connection connection) throws SQLException {
-        return connection.prepareStatement("SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP)");
+    public long utcOffset(Connection connection) throws SQLException {
+        var rs = connection.prepareStatement("SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP)").executeQuery();
+        rs.next();
+        return rs.getTime(1).getSeconds();
     }
 
 
@@ -41,7 +43,7 @@ public class DefaultQueryBuilder implements QueryBuilder {
                 " FROM " + tableInfo.getName() +
                 " WHERE " + coalescedTimes + " < :maxTime" +
                 " AND " + coalescedTimes + " > :startTime" +
-                " HAVING MAX( " + coalescedTimes  + ") IS NOT NULL";
+                " HAVING MAX( " + coalescedTimes + ") IS NOT NULL";
         var statement = new NamedPreparedStatment(connection, query);
         statement.setTime("startTime", metadata.getEndTime());
         statement.setTime("maxTime", maxTime);
@@ -75,15 +77,12 @@ public class DefaultQueryBuilder implements QueryBuilder {
                                                    int limit,
                                                    Connection connection) throws SQLException {
         String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
-        String query = "SELECT *" +
+        String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
                 " AND " + coalesce + " BETWEEN :startTime AND :endTime" +
                 " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
-                "";
-        if (limit > 0) {
-            query = query + " limit " + limit;
-        }
+                " " + endLimit(limit);
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", metadata.getInclusiveStart());
@@ -102,14 +101,11 @@ public class DefaultQueryBuilder implements QueryBuilder {
                                              int limit,
                                              Connection connection) throws SQLException {
         String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
-        String query = "SELECT *" +
+        String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
                 " ORDER BY " + coalesce + " ASC" +
-                "";
-        if (limit > 0) {
-            query = query + " limit " + limit;
-        }
+                " " + endLimit(limit);
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setTime("startTime", metadata.getStartTime());
@@ -125,12 +121,10 @@ public class DefaultQueryBuilder implements QueryBuilder {
                                             JDBCTaskMetadata metadata,
                                             int limit,
                                             Connection connection) throws SQLException {
-        String query = "SELECT *" +
+        String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
-                " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd";
-        if (limit > 0) {
-            query = query + " limit " + limit;
-        }
+                " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
+                " " + endLimit(limit);
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", metadata.getInclusiveStart());
@@ -152,5 +146,13 @@ public class DefaultQueryBuilder implements QueryBuilder {
 
     private String coalesce(String columns) {
         return "COALESCE(" + columns + ")";
+    }
+
+    protected String topLimit(long amount) {
+        return "";
+    }
+
+    protected String endLimit(long amount) {
+        return amount >= 0 ? "limit " + amount : "";
     }
 }

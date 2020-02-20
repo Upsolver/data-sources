@@ -3,8 +3,9 @@ package com.upsolver.datasources.jdbc;
 import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
-import com.upsolver.datasources.jdbc.querybuilders.DefaultQueryBuilder;
-import com.upsolver.datasources.jdbc.querybuilders.QueryBuilder;
+import com.upsolver.datasources.jdbc.querybuilders.DefaultQueryDialect;
+import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
+import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.*;
@@ -28,7 +29,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private String identifierEscaper;
     private long readDelay;
     private TableInfo tableInfo;
-    private QueryBuilder queryBuilder;
+    private QueryDialect queryDialect;
     private long dbTimezoneOffset;
     private long overallQueryTimeAdjustment;
 
@@ -49,11 +50,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         String connectionString = properties.get(connectionStringProp);
         String userName = properties.get(userNameProp);
         String password = properties.get(passwordProp);
-        queryBuilder = new DefaultQueryBuilder();
 
         try {
             readDelay = Long.parseLong(properties.getOrDefault(readDelayProp, "0"));
             connection = DriverManager.getConnection(connectionString, userName, password);
+            queryDialect = QueryDialectProvider.forConnection(connection);
             DatabaseMetaData metadata = connection.getMetaData();
             identifierEscaper = metadata.getIdentifierQuoteString();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
@@ -80,18 +81,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             if (filteredTimestampColumns.length != 0) {
                 tableInfo.setTimeColumns(filteredTimestampColumns);
             }
-            dbTimezoneOffset = getDbTimezoneOffset();
+            dbTimezoneOffset = queryDialect.utcOffset(connection);
             overallQueryTimeAdjustment = dbTimezoneOffset - readDelay;
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
         }
     }
 
-    private long getDbTimezoneOffset() throws SQLException {
-        var offsetRS = queryBuilder.utcOffset(connection).executeQuery();
-        offsetRS.next();
-        return offsetRS.getTime(1).getSeconds();
-    }
 
     private boolean isAutoInc(ResultSet columns) throws SQLException {
         return "yes".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT"));
@@ -153,12 +149,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         try {
             if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
-                    return queryBuilder.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
+                    return queryDialect.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
                 } else {
-                    return this.queryBuilder.queryByTime(this.tableInfo, metadata, limit, this.connection).executeQuery();
+                    return this.queryDialect.queryByTime(this.tableInfo, metadata, limit, this.connection).executeQuery();
                 }
             } else {
-                return queryBuilder.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
+                return queryDialect.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
             }
         } catch (Exception e) {
             throw new RuntimeException("Error while reading table", e);
@@ -184,7 +180,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     private Timestamp getCurrentTimestamp() throws SQLException {
-        var rs = queryBuilder.getCurrentTimestamp(connection).executeQuery();
+        var rs = queryDialect.getCurrentTimestamp(connection).executeQuery();
         rs.next();
         return rs.getTimestamp(1);
     }
@@ -367,12 +363,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         if (tableInfo.hasTimeColumns()) {
             Instant maxTime = toQueryTime(taskRange.getExclusiveEndTime());
             if (tableInfo.getIncColumn() != null) {
-                return queryBuilder.taskInfoByIncAndTime(tableInfo, metadata, maxTime, connection);
+                return queryDialect.taskInfoByIncAndTime(tableInfo, metadata, maxTime, connection);
             } else {
-                return queryBuilder.taskInfoByTime(tableInfo, metadata, maxTime, connection);
+                return queryDialect.taskInfoByTime(tableInfo, metadata, maxTime, connection);
             }
         } else {
-            return queryBuilder.taskInfoByInc(tableInfo, metadata, connection);
+            return queryDialect.taskInfoByInc(tableInfo, metadata, connection);
         }
     }
 

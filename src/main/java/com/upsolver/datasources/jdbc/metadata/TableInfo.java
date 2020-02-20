@@ -1,8 +1,5 @@
 package com.upsolver.datasources.jdbc.metadata;
 
-import java.util.Arrays;
-import java.util.stream.Collectors;
-
 public class TableInfo {
     private String catalog;
     private String schema;
