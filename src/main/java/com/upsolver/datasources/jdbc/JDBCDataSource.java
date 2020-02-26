@@ -3,7 +3,6 @@ package com.upsolver.datasources.jdbc;
 import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
-import com.upsolver.datasources.jdbc.querybuilders.DefaultQueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
@@ -131,7 +130,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         JDBCTaskMetadata sampleMetadata =
                 new JDBCTaskMetadata(0L, Long.MAX_VALUE, Instant.EPOCH, toQueryTime(Instant.now()));
         var result = queryData(sampleMetadata, 100);
-        var rowReader = new RowReader(tableInfo, result, 100, null);
+        var rowReader = new RowReader(tableInfo, result, sampleMetadata);
         var inputStream = new ResultSetInputStream(tableInfo, rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
@@ -179,12 +178,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     }
 
-    private Timestamp getCurrentTimestamp() throws SQLException {
-        var rs = queryDialect.getCurrentTimestamp(connection).executeQuery();
-        rs.next();
-        return rs.getTimestamp(1);
-    }
-
     private List<PropertyError> validateTableInfo(Connection connection,
                                                   String tableName,
                                                   String incColumn) {
@@ -214,124 +207,106 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     @Override
     public CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> getDataLoaders(TaskInformation<JDBCTaskMetadata> taskInfo,
-                                                                                  JDBCTaskMetadata previousSuccessful,
+                                                                                  List<TaskRange> completedRanges,
                                                                                   List<TaskRange> wantedRanges,
                                                                                   ShardDefinition shardDefinition) {
-        var taskCount = wantedRanges.size();
+        var taskCount = completedRanges.size() + wantedRanges.size();
         var itemsPerTask = (taskInfo.getMetadata().itemsPerTask(taskCount));
-        var previous = previousSuccessful != null ? previousSuccessful : new JDBCTaskMetadata(0, 0);
-        if (tableInfo.hasIncColumn() && itemsPerTask == 0) {
+        if (!tableInfo.hasTimeColumns() && itemsPerTask == 0) {
             List<DataLoader<JDBCTaskMetadata>> result =
-                    wantedRanges.stream()
-                            .map(t -> new NoDataLoader(t, previous))
-                            .collect(Collectors.toList());
+                    wantedRanges.stream().map(t -> new NoDataLoader(t, taskInfo.getMetadata())).collect(Collectors.toList());
             return CompletableFuture.completedFuture(result.iterator());
         } else {
-            var resultSet = queryData(taskInfo.getMetadata()
-                    .limitByPrevious(previous)
-                    .adjustWithDelay(overallQueryTimeAdjustment), -1);
-            if (tableInfo.hasTimeColumns()) {
-                return splitDataByTimes(resultSet, previous, wantedRanges);
-            } else {
-                return splitDataByIncColumn(resultSet, previous, taskInfo, wantedRanges, itemsPerTask);
+            var runMetadatas = getRunMetadatas(taskInfo, taskCount, itemsPerTask, wantedRanges);
+            var firstMetadata = runMetadatas.get(0);
+            var lastMetadata = runMetadatas.get(runMetadatas.size() - 1);
+            var queryMetadata = new JDBCTaskMetadata(firstMetadata.getInclusiveStart(), lastMetadata.getExclusiveEnd(),
+                    firstMetadata.getStartTime(), lastMetadata.getEndTime())
+                    .adjustWithDelay(dbTimezoneOffset, readDelay);
+            var resultSet = queryData(queryMetadata, -1);
+            return splitData(resultSet, wantedRanges, runMetadatas);
+        }
+    }
+
+    private List<JDBCTaskMetadata> getRunMetadatas(TaskInformation<JDBCTaskMetadata> taskInfo,
+                                                   int taskCount,
+                                                   double itemsPerTask,
+                                                   List<TaskRange> wantedRanges) {
+        var result = new ArrayList<JDBCTaskMetadata>();
+        int wantedSize = wantedRanges.size();
+        var wantedIndexStart = taskCount - wantedSize;
+        if (tableInfo.hasTimeColumns()) {
+            for (int i = 0; i < wantedSize; i++) {
+                var firstInBatch = i == 0 && taskCount == wantedSize;
+                TaskRange wantedRange = wantedRanges.get(i);
+                // First task does not have lower bound to ensure we don't skip data from the last point we stopped at
+                var startTime = firstInBatch ? taskInfo.getMetadata().getStartTime() : wantedRange.getInclusiveStartTime();
+                var metadata = new JDBCTaskMetadata(taskInfo.getMetadata().getInclusiveStart(),
+                        taskInfo.getMetadata().getExclusiveEnd(),
+                        startTime,
+                        wantedRange.getExclusiveEndTime());
+                result.add(metadata);
+            }
+        } else {
+            var start = (double) taskInfo.getMetadata().getInclusiveStart();
+            // Make sure to iterate the full task count and not just wantedRanges.size() to avoid rounding error differences
+            // between executions with different amounts of wantedRanges
+            for (int i = 0; i < taskCount; i++) {
+                var endValue = start + itemsPerTask;
+                // Due to rounding of values make sure the last task gets everything remaining
+                if (i == taskCount - 1) endValue = Math.max(endValue, taskInfo.getMetadata().getExclusiveEnd());
+                var metadata = new JDBCTaskMetadata((long) start, (long) endValue, Instant.MIN, Instant.MAX);
+                if (i >= wantedIndexStart) {
+                    result.add(metadata);
+                }
+                start = endValue;
             }
         }
+        return result;
     }
 
-    private CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> splitDataByTimes(ResultSet resultSet,
-                                                                                     JDBCTaskMetadata previousSuccessful,
-                                                                                     List<TaskRange> wantedRanges) {
+
+    private CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> splitData(ResultSet resultSet,
+                                                                              List<TaskRange> wantedRanges,
+                                                                              List<JDBCTaskMetadata> runMetadatas) {
         var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
-
-        var previousRef = new AtomicReference<>(previousSuccessful);
-
+        var lastReadIncValue = new AtomicReference<>(runMetadatas.get(0).getInclusiveStart());
+        var lastReadTime = new AtomicReference<>(runMetadatas.get(0).getStartTime());
         for (int i = 0; i < wantedRanges.size(); i++) {
-            TaskRange taskRange = wantedRanges.get(i);
-            final var closeStream = i == wantedRanges.size() - 1;
-
-            var loader = new DataLoader<JDBCTaskMetadata>() {
-
-                private final RowReader rowReader =
-                        new RowReader(tableInfo, resultSet, -1, Timestamp.from(toQueryTime(taskRange.getExclusiveEndTime())));
-
-                @Override
-                public TaskRange getTaskRange() {
-                    return taskRange;
-                }
-
-                @Override
-                public Iterator<LoadedData> loadData() {
-                    ResultSetInputStream inputStream = new ResultSetInputStream(tableInfo, rowReader, closeStream);
-                    var result = new LoadedData(inputStream, new HashMap<>(), taskRange.getInclusiveStartTime());
-                    return Collections.singleton(result).iterator();
-                }
-
-                @Override
-                public JDBCTaskMetadata getCompletedMetadata() {
-                    try {
-                        var timestamp = rowReader.getLastTimestampValue();
-                        var actualEndTime = previousRef.get().getEndTime();
-                        if (timestamp != null) {
-                            actualEndTime = toUtc(timestamp.toInstant());
-                        }
-                        var incMinValue = previousRef.get().getExclusiveEnd();
-                        var incColumn = rowReader.getLastIncValue();
-                        previousRef.set(new JDBCTaskMetadata(incMinValue,
-                                Math.max(incColumn + 1, incMinValue),
-                                actualEndTime,
-                                actualEndTime));
-                        return previousRef.get();
-                    } catch (Exception e) {
-                        throw new RuntimeException("Failed to read metadata from result set", e);
-                    }
-                }
-            };
-            result.add(loader);
-        }
-        return CompletableFuture.completedFuture(result.iterator());
-    }
-
-
-    private CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> splitDataByIncColumn(ResultSet resultSet,
-                                                                                         JDBCTaskMetadata previousSuccessful,
-                                                                                         TaskInformation<JDBCTaskMetadata> taskInfo,
-                                                                                         List<TaskRange> wantedRanges,
-                                                                                         double itemsPerTask) {
-        var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
-        var start = (double) Math.max(taskInfo.getMetadata().getInclusiveStart(), previousSuccessful.getExclusiveEnd());
-        int taskCount = wantedRanges.size();
-        for (int i = 0; i < taskCount; i++) {
-            final var closeStream = i == taskCount - 1;
+            final var isLast = i == wantedRanges.size() - 1;
             final var taskRange = wantedRanges.get(i);
-            var endValue = start + itemsPerTask;
-            // Due to rounding of values make sure the last task gets everything remaining
-            if (i == taskCount - 1) endValue = Math.max(endValue, taskInfo.getMetadata().getExclusiveEnd());
-            final var metadata = new JDBCTaskMetadata((long) start, (long) endValue, Instant.MIN, Instant.MAX);
-            start = endValue;
+            final var metadata = runMetadatas.get(i);
             var loader = new DataLoader<JDBCTaskMetadata>() {
                 @Override
                 public TaskRange getTaskRange() {
                     return taskRange;
                 }
 
-                private final RowReader rowReader =
-                        new RowReader(tableInfo, resultSet, metadata.itemCount(), null);
+                private final RowReader rowReader = new RowReader(tableInfo, resultSet, metadata);
 
                 @Override
                 public Iterator<LoadedData> loadData() {
-                    ResultSetInputStream inputStream = new ResultSetInputStream(tableInfo, rowReader, closeStream);
+                    ResultSetInputStream inputStream = new ResultSetInputStream(tableInfo, rowReader, isLast);
                     var result = new LoadedData(inputStream, new HashMap<>(), taskRange.getInclusiveStartTime());
                     return Collections.singleton(result).iterator();
                 }
 
                 @Override
                 public JDBCTaskMetadata getCompletedMetadata() {
+                    if (tableInfo.hasTimeColumns() && rowReader.readValues()){
+                        lastReadTime.set(rowReader.getLastTimestampValue().toInstant());
+                        lastReadIncValue.set(rowReader.getLastIncValue());
+                    }
+                    metadata.setExclusiveEnd(lastReadIncValue.get() + 1);
+                    metadata.setEndTime(lastReadTime.get());
                     return metadata;
                 }
             };
             result.add(loader);
+
         }
         return CompletableFuture.completedFuture(result.iterator());
+
     }
 
 

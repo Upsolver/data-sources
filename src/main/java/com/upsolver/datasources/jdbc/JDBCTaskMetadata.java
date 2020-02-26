@@ -1,5 +1,6 @@
 package com.upsolver.datasources.jdbc;
 
+import com.upsolver.common.datasources.TaskRange;
 import com.upsolver.datasources.jdbc.utils.InstantMath;
 
 import java.io.Serializable;
@@ -38,10 +39,6 @@ public class JDBCTaskMetadata implements Serializable {
         return Math.max(exclusiveEnd - inclusiveStart, 0) / (double) taskCount;
     }
 
-    public int itemCount() {
-        return (int) (exclusiveEnd - inclusiveStart);
-    }
-
     public long getInclusiveStart() {
         return inclusiveStart;
     }
@@ -76,18 +73,14 @@ public class JDBCTaskMetadata implements Serializable {
         this.startTime = startTime;
     }
 
-    public JDBCTaskMetadata adjustWithDelay(Long readDelay) {
-        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, startTime.plusSeconds(readDelay), endTime.plusSeconds(readDelay));
+    public JDBCTaskMetadata adjustWithDelay(Long dbOffset, Long readDelay) {
+        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, startTime.plusSeconds(dbOffset), endTime.plusSeconds(dbOffset - readDelay));
     }
 
-    public JDBCTaskMetadata limitByPrevious(JDBCTaskMetadata previous) {
-        return new JDBCTaskMetadata(
-                Math.max(inclusiveStart, previous.inclusiveStart),
-                Math.max(exclusiveEnd, previous.exclusiveEnd),
-                InstantMath.max(startTime, previous.startTime),
-                InstantMath.max(endTime, previous.endTime)
-        );
+    public JDBCTaskMetadata truncateToStart() {
+        return new JDBCTaskMetadata(inclusiveStart, inclusiveStart, startTime, startTime);
     }
+
 }
 
 
