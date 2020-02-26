@@ -9,40 +9,51 @@ import java.sql.Timestamp;
 public class RowReader implements AutoCloseable {
     private final TableInfo tableInfo;
     private final ResultSet underlying;
-    private final int readLimit;
+    private final JDBCTaskMetadata metadata;
     private final Timestamp timeLimit;
+    private final Timestamp lowerTimeLimit;
 
+    private boolean readValues;
     private long lastIncValue;
     private Timestamp lastTimestampValue;
 
-    private int count = 0;
-
-    public RowReader(TableInfo tableInfo, ResultSet underlying, int readLimit, Timestamp timeLimit) {
+    public RowReader(TableInfo tableInfo, ResultSet underlying, JDBCTaskMetadata metadata) {
         this.tableInfo = tableInfo;
         this.underlying = underlying;
-        this.readLimit = readLimit;
-        this.timeLimit = timeLimit;
+        this.metadata = metadata;
+        this.timeLimit = Timestamp.from(metadata.getEndTime());
+        this.lowerTimeLimit = Timestamp.from(metadata.getStartTime());
     }
 
     public boolean next() throws SQLException {
-        if (readLimit >= 0 && count >= readLimit) return false;
         var result = underlying.next();
-        if (result){
-            var newTimestamp  = tableInfo.hasTimeColumns() ? extractTimestamp() : null;
-            var newIncValue =  tableInfo.hasIncColumn() ? extractIncValue() : 0L;
-            if (timeLimit != null){
-                if (newTimestamp.compareTo(timeLimit) >= 0) {
-                    underlying.previous();
-                    result =false;
-                }
+        if (result) {
+            var newTimestamp = tableInfo.hasTimeColumns() ? extractTimestamp() : null;
+            var newIncValue = tableInfo.hasIncColumn() ? extractIncValue() : 0L;
+            if (exceedsLimits(newTimestamp, newIncValue)) {
+                underlying.previous();
+                result = false;
             }
             if (result) {
+                readValues = true;
                 lastTimestampValue = newTimestamp;
                 lastIncValue = newIncValue;
-                count++;
+            }
+            if (precedesLimits(newTimestamp)){
+                // Do this after saving the updated timestamp values
+                return next();
             }
         }
         return result;
+    }
+
+    private boolean precedesLimits(Timestamp newTimestamp) {
+        return (tableInfo.hasTimeColumns() && newTimestamp.compareTo(lowerTimeLimit) < 0);
+    }
+
+    private boolean exceedsLimits(Timestamp newTimestamp, long newIncValue) {
+        return (tableInfo.hasTimeColumns() && newTimestamp.compareTo(timeLimit) >= 0) ||
+                (tableInfo.hasIncColumn() && newIncValue >= metadata.getExclusiveEnd());
     }
 
     public String[] getValues() throws SQLException {
@@ -64,7 +75,7 @@ public class RowReader implements AutoCloseable {
                 return ts;
             }
         }
-        return null;
+        throw new IllegalStateException("Every row must contain a timestamp");
     }
 
     public long getLastIncValue() {
@@ -73,6 +84,10 @@ public class RowReader implements AutoCloseable {
 
     public Timestamp getLastTimestampValue() {
         return lastTimestampValue;
+    }
+
+    public boolean readValues() {
+        return readValues;
     }
 
     @Override

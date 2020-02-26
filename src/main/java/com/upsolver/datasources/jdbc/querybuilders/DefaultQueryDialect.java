@@ -79,14 +79,14 @@ public class DefaultQueryDialect implements QueryDialect {
         String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
-                " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
-                " AND " + coalesce + " BETWEEN :startTime AND :endTime" +
+                " WHERE " + coalesce + " < :endTime" +
+                " AND ((" + coalesce + " = :startTime AND " + tableInfo.getIncColumn() + " >= :incStart)" +
+                " OR (" + coalesce + " > :startTime))" +
                 " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
                 " " + endLimit(limit);
         try {
             var statement = new NamedPreparedStatment(connection, query);
             statement.setLong("incStart", metadata.getInclusiveStart());
-            statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
             statement.setTime("startTime", metadata.getStartTime());
             statement.setTime("endTime", metadata.getEndTime());
             return statement;
