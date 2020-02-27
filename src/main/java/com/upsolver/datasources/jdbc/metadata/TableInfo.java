@@ -1,21 +1,22 @@
 package com.upsolver.datasources.jdbc.metadata;
 
+import java.util.Arrays;
+
 public class TableInfo {
     private String catalog;
     private String schema;
     private String name;
 
     private String incColumn;
-    private String[] allColumns;
+    private ColumnInfo[] columns;
     private String[] timeColumns;
 
-    public TableInfo(String catalog, String schema, String name, String incColumn, String[] allColumns, String[] timeColumns) {
+    public TableInfo(String catalog, String schema, String name,
+                     ColumnInfo[] columns) {
         this.catalog = catalog;
         this.schema = schema;
         this.name = name;
-        this.incColumn = incColumn;
-        this.allColumns = allColumns;
-        this.timeColumns = timeColumns;
+        this.columns = columns;
     }
 
     public String getSchema() {
@@ -38,10 +39,6 @@ public class TableInfo {
         this.incColumn = incColumn;
     }
 
-    public void setColumns(String[] columns) {
-        allColumns = columns;
-    }
-
     public String getTimeColumnsAsString() {
         return String.join(",", timeColumns);
     }
@@ -51,11 +48,13 @@ public class TableInfo {
     }
 
     public int getColumnCount() {
-        return allColumns.length;
+        return columns.length;
     }
 
-    public String[] getColumns() {
-        return allColumns;
+    public ColumnInfo[] getColumns() { return columns; }
+
+    public ColumnInfo getColumn(String name) {
+        return Arrays.stream(columns).filter(x -> x.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
     }
 
     public boolean hasTimeColumns() {
@@ -70,3 +69,4 @@ public class TableInfo {
         this.timeColumns = timeColumns;
     }
 }
+

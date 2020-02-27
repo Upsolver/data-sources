@@ -84,15 +84,12 @@ public class DefaultQueryDialect implements QueryDialect {
                 " OR (" + coalesce + " > :startTime))" +
                 " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
                 " " + endLimit(limit);
-        try {
-            var statement = new NamedPreparedStatment(connection, query);
-            statement.setLong("incStart", metadata.getInclusiveStart());
-            statement.setTime("startTime", metadata.getStartTime());
-            statement.setTime("endTime", metadata.getEndTime());
-            return statement;
-        } catch (Exception e) {
-            throw new RuntimeException("Error while reading table", e);
-        }
+        var statement = new NamedPreparedStatment(connection, query);
+        statement.setLong("incStart", metadata.getInclusiveStart());
+        statement.setTime("startTime", metadata.getStartTime());
+        statement.setTime("endTime", metadata.getEndTime());
+        return statement;
+
     }
 
     @Override
@@ -106,14 +103,11 @@ public class DefaultQueryDialect implements QueryDialect {
                 " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
                 " ORDER BY " + coalesce + " ASC" +
                 " " + endLimit(limit);
-        try {
-            var statement = new NamedPreparedStatment(connection, query);
-            statement.setTime("startTime", metadata.getStartTime());
-            statement.setTime("endTime", metadata.getEndTime());
-            return statement;
-        } catch (Exception e) {
-            throw new RuntimeException("Error while reading table", e);
-        }
+        var statement = new NamedPreparedStatment(connection, query);
+        statement.setTime("startTime", metadata.getStartTime());
+        statement.setTime("endTime", metadata.getEndTime());
+        return statement;
+
     }
 
     @Override
@@ -125,14 +119,10 @@ public class DefaultQueryDialect implements QueryDialect {
                 " FROM " + tableInfo.getName() +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
                 " " + endLimit(limit);
-        try {
-            var statement = new NamedPreparedStatment(connection, query);
-            statement.setLong("incStart", metadata.getInclusiveStart());
-            statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
-            return statement;
-        } catch (Exception e) {
-            throw new RuntimeException("Error while reading table", e);
-        }
+        var statement = new NamedPreparedStatment(connection, query);
+        statement.setLong("incStart", metadata.getInclusiveStart());
+        statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
+        return statement;
     }
 
     @Override
