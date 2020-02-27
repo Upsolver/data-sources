@@ -73,8 +73,8 @@ public class JDBCTaskMetadata implements Serializable {
         this.startTime = startTime;
     }
 
-    public JDBCTaskMetadata adjustWithDelay(Long dbOffset, Long readDelay) {
-        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, startTime.plusSeconds(dbOffset), endTime.plusSeconds(dbOffset - readDelay));
+    public JDBCTaskMetadata adjustWithDelay(Long dbOffset) {
+        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, startTime.plusSeconds(dbOffset), endTime.plusSeconds(dbOffset ));
     }
 
     public JDBCTaskMetadata truncateToStart() {

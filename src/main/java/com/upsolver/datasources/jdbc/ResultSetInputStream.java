@@ -1,5 +1,6 @@
 package com.upsolver.datasources.jdbc;
 
+import com.upsolver.datasources.jdbc.metadata.ColumnInfo;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 
 import java.io.ByteArrayOutputStream;
@@ -55,9 +56,9 @@ public class ResultSetInputStream extends InputStream {
     }
 
     private void writeHeader(ByteArrayOutputStream byteArrayOutputStream) throws IOException {
-        String[] columns = tableInfo.getColumns();
+        ColumnInfo[] columns = tableInfo.getColumns();
         for (int i = 0; i < columns.length; i++) {
-            byteArrayOutputStream.write(columns[i].getBytes());
+            byteArrayOutputStream.write(columns[i].getName().getBytes());
             writeCommaOrNewLine(byteArrayOutputStream, i);
         }
     }

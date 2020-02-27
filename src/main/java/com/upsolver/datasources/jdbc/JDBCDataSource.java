@@ -2,6 +2,7 @@ package com.upsolver.datasources.jdbc;
 
 import com.upsolver.common.datasources.*;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
+import com.upsolver.datasources.jdbc.metadata.ColumnInfo;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
@@ -25,7 +26,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
 
-    private String identifierEscaper;
     private long readDelay;
     private TableInfo tableInfo;
     private QueryDialect queryDialect;
@@ -55,27 +55,23 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             connection = DriverManager.getConnection(connectionString, userName, password);
             queryDialect = QueryDialectProvider.forConnection(connection);
             DatabaseMetaData metadata = connection.getMetaData();
-            identifierEscaper = metadata.getIdentifierQuoteString();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
             tableInfo = loadTableInfo(metadata, properties.get(tableNameProp));
-            var allColumnNames = new HashSet<String>();
-            var allColumns = new ArrayList<String>();
+            var allTimeColumns = new HashSet<String>();
             if (userProvidedIncColumn != null) {
                 tableInfo.setIncColumn(userProvidedIncColumn);
             }
-            var columns = metadata.getColumns(tableInfo.getCatalog(), tableInfo.getSchema(), tableInfo.getName(), null);
-            while (columns.next()) {
-                String colName = columns.getString("COLUMN_NAME");
-                allColumnNames.add(colName.toUpperCase());
-                allColumns.add(colName);
-                if (tableInfo.getIncColumn() == null && isAutoInc(columns)) {
-                    tableInfo.setIncColumn(colName);
+            for (ColumnInfo column : tableInfo.getColumns()) {
+                if (column.isTimeType()) {
+                    allTimeColumns.add(column.getName().toUpperCase());
+                } else if (tableInfo.getIncColumn() == null && column.isIncCol()) {
+                    tableInfo.setIncColumn(column.getName());
                 }
             }
-            tableInfo.setColumns(allColumns.toArray(String[]::new));
             String[] filteredTimestampColumns =
                     Arrays.stream(properties.getOrDefault(timestampColumnsProp, "").split(","))
-                            .filter(x -> allColumnNames.contains(x.toUpperCase()))
+                            .map(String::trim)
+                            .filter(x -> allTimeColumns.contains(x.toUpperCase()))
                             .toArray(String[]::new);
             if (filteredTimestampColumns.length != 0) {
                 tableInfo.setTimeColumns(filteredTimestampColumns);
@@ -95,12 +91,20 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private TableInfo loadTableInfo(DatabaseMetaData metadata, String tableName) throws SQLException {
         var tables = metadata.getTables(null, null, tableName, new String[]{"TABLE"});
         if (tables.next()) {
-            return new TableInfo(tables.getString(1),
-                    tables.getString(2),
-                    tables.getString(3),
-                    null,
-                    null,
-                    null);
+            var columns = new ArrayList<ColumnInfo>();
+            String catalog = tables.getString(1);
+            String schema = tables.getString(2);
+            String dbTableName = tables.getString(3);
+
+            var columnRs = metadata.getColumns(catalog, schema, dbTableName, null);
+            while (columnRs.next()) {
+                String colName = columnRs.getString("COLUMN_NAME");
+                int type = columnRs.getInt("DATA_TYPE");
+                var sqlType = JDBCType.valueOf(type);
+                columns.add(new ColumnInfo(colName, sqlType, isAutoInc(columnRs)));
+            }
+
+            return new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
         } else {
             throw new IllegalArgumentException("Could not find table with name: " + tableName);
         }
@@ -166,11 +170,15 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var connectionString = properties.get(connectionStringProp);
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
+        var timestampColString = properties.get(timestampColumnsProp);
+        var timestampCols =
+                timestampColString != null ?
+                        Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
         try (var connection = DriverManager.getConnection(connectionString, user, pass)) {
-            identifierEscaper = connection.getMetaData().getIdentifierQuoteString();
             return validateTableInfo(connection,
-                    secureIdentifier(properties.get(tableNameProp)),
-                    properties.get(incrementingColumnNameProp));
+                    properties.get(tableNameProp),
+                    properties.get(incrementingColumnNameProp),
+                    timestampCols);
         } catch (SQLException e) {
             return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct.\n" +
                     "SqlError: " + e.getMessage()));
@@ -180,27 +188,47 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private List<PropertyError> validateTableInfo(Connection connection,
                                                   String tableName,
-                                                  String incColumn) {
+                                                  String incColumn,
+                                                  String[] timestampColumns) {
         var result = new ArrayList<PropertyError>();
 
         try {
-            var columns = connection.getMetaData().getColumns(null, null, tableName, null);
-            var columnNames = new HashMap<String, Boolean>();
-            while (columns.next()) {
-                columnNames.put(columns.getString("COLUMN_NAME"), isAutoInc(columns));
-            }
+            var connectionMetadata = connection.getMetaData();
+            var tableInfo = loadTableInfo(connectionMetadata, tableName);
             if (incColumn != null) {
-                var autoInc = columnNames.get(incColumn.trim());
+                var autoInc = tableInfo.getColumn(incColumn);
                 if (autoInc == null) {
                     result.add(new PropertyError(incrementingColumnNameProp, "Could not find increment column " + incColumn));
-                } else if (!autoInc) {
+                } else if (!autoInc.isIncCol()) {
                     result.add(new PropertyError(incrementingColumnNameProp, "Column " + incColumn + " is not an auto-inc column"));
                 }
             }
-
+            var foundTimeCol = false;
+            for (String timestampColumn : timestampColumns) {
+                var col = tableInfo.getColumn(timestampColumn);
+                if (col != null) {
+                    if (col.isTimeType()) {
+                        foundTimeCol = true;
+                    } else {
+                        result.add(new PropertyError(timestampColumnsProp, "Column '" + timestampColumn + "' is not a timestamp columns"));
+                    }
+                }
+            }
+            if (timestampColumns.length > 0 && !foundTimeCol) {
+                result.add(new PropertyError(timestampColumnsProp, "Non of the provided timestamp columns exist in the table"));
+            }
+            if (timestampColumns.length == 0) {
+                if (Arrays.stream(tableInfo.getColumns()).noneMatch(ColumnInfo::isIncCol)) {
+                    result.add(new PropertyError(timestampColumnsProp,
+                            "The table has no auto-incrementing column, you must provide update time columns to use"));
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            result.add(new PropertyError(tableNameProp, "Could load table with name: '" + tableName + "'. " + e.getMessage()));
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get table info", e);
         }
+
         return result;
     }
 
@@ -217,12 +245,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     wantedRanges.stream().map(t -> new NoDataLoader(t, taskInfo.getMetadata())).collect(Collectors.toList());
             return CompletableFuture.completedFuture(result.iterator());
         } else {
+
             var runMetadatas = getRunMetadatas(taskInfo, taskCount, itemsPerTask, wantedRanges);
             var firstMetadata = runMetadatas.get(0);
             var lastMetadata = runMetadatas.get(runMetadatas.size() - 1);
             var queryMetadata = new JDBCTaskMetadata(firstMetadata.getInclusiveStart(), lastMetadata.getExclusiveEnd(),
                     firstMetadata.getStartTime(), lastMetadata.getEndTime())
-                    .adjustWithDelay(dbTimezoneOffset, readDelay);
+                    .adjustWithDelay(dbTimezoneOffset);
             var resultSet = queryData(queryMetadata, -1);
             return splitData(resultSet, wantedRanges, runMetadatas);
         }
@@ -240,11 +269,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 var firstInBatch = i == 0 && taskCount == wantedSize;
                 TaskRange wantedRange = wantedRanges.get(i);
                 // First task does not have lower bound to ensure we don't skip data from the last point we stopped at
-                var startTime = firstInBatch ? taskInfo.getMetadata().getStartTime() : wantedRange.getInclusiveStartTime();
+                var startTime =
+                        firstInBatch ? taskInfo.getMetadata().getStartTime() : wantedRange.getInclusiveStartTime().minusSeconds(readDelay);
                 var metadata = new JDBCTaskMetadata(taskInfo.getMetadata().getInclusiveStart(),
                         taskInfo.getMetadata().getExclusiveEnd(),
                         startTime,
-                        wantedRange.getExclusiveEndTime());
+                        wantedRange.getExclusiveEndTime().minusSeconds(readDelay));
                 result.add(metadata);
             }
         } else {
@@ -293,12 +323,16 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
                 @Override
                 public JDBCTaskMetadata getCompletedMetadata() {
-                    if (tableInfo.hasTimeColumns() && rowReader.readValues()){
-                        lastReadTime.set(rowReader.getLastTimestampValue().toInstant());
-                        lastReadIncValue.set(rowReader.getLastIncValue());
+                    if (tableInfo.hasTimeColumns() && rowReader.readValues()) {
+                        if (rowReader.readValues()) {
+                            // If some data was successfully read then that's our next start point
+                            lastReadTime.set(toUtc(rowReader.getLastTimestampValue().toInstant()));
+                            lastReadIncValue.set(rowReader.getLastIncValue());
+                        }
+                        metadata.setExclusiveEnd(lastReadIncValue.get() + 1);
+                        metadata.setEndTime(lastReadTime.get());
                     }
-                    metadata.setExclusiveEnd(lastReadIncValue.get() + 1);
-                    metadata.setEndTime(lastReadTime.get());
+
                     return metadata;
                 }
             };
@@ -355,10 +389,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var endTime = previousTaskMetadatas.stream().map(JDBCTaskMetadata::getEndTime)
                 .max(Comparator.naturalOrder()).orElse(null);
         return new JDBCTaskMetadata(endValue, endValue, endTime, endTime);
-    }
-
-    private String secureIdentifier(String identifier) {
-        return identifierEscaper + identifier.replace(identifierEscaper, identifierEscaper + identifierEscaper) + identifierEscaper;
     }
 
 }
