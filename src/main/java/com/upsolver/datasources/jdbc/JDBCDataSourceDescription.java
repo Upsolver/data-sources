@@ -19,9 +19,9 @@ class JDBCDataSourceDescription implements DataSourceDescription {
                 "\nThe table must contain an Auto-Incrementing column, which will be used to ensure exacly once processing.";
     }
 
-//        @Override
-//        public String getIconResourceName() {
-//            return "jdbc-logo.svg";
-//        }
+    @Override
+    public String getIconResourceName() {
+        return "jdbc-logo.svg";
+    }
 
 }
