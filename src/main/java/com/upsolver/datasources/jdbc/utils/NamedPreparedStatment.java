@@ -10,6 +10,8 @@ import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
 
+import static java.sql.ResultSet.TYPE_SCROLL_INSENSITIVE;
+
 public class NamedPreparedStatment implements AutoCloseable {
     static final private Pattern namedVariable = Pattern.compile(":(\\w+)");
 
@@ -31,7 +33,7 @@ public class NamedPreparedStatment implements AutoCloseable {
             }
         });
 
-        prepStmt = conn.prepareStatement(finalSql);
+        prepStmt = conn.prepareStatement(finalSql, TYPE_SCROLL_INSENSITIVE);
     }
 
 
@@ -63,7 +65,7 @@ public class NamedPreparedStatment implements AutoCloseable {
 
     public void setTime(String name, Instant time) throws SQLException {
         var timestamp = Timestamp.from(time);
-        for (int i: getIndices(name)) {
+        for (int i : getIndices(name)) {
             prepStmt.setTimestamp(i, timestamp);
         }
     }
