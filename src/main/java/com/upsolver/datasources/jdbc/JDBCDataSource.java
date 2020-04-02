@@ -285,7 +285,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 var endValue = start + itemsPerTask;
                 // Due to rounding of values make sure the last task gets everything remaining
                 if (i == taskCount - 1) endValue = Math.max(endValue, taskInfo.getMetadata().getExclusiveEnd());
-                var metadata = new JDBCTaskMetadata((long) start, (long) endValue, Instant.MIN, Instant.MAX);
+                var metadata = new JDBCTaskMetadata((long) start, (long) endValue, Instant.MIN, JDBCTaskMetadata.initalEndTime);
                 if (i >= wantedIndexStart) {
                     result.add(metadata);
                 }
