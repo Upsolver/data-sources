@@ -4,6 +4,7 @@ import com.upsolver.common.datasources.TaskRange;
 import com.upsolver.datasources.jdbc.utils.InstantMath;
 
 import java.io.Serializable;
+import java.time.DateTimeException;
 import java.time.Instant;
 
 public class JDBCTaskMetadata implements Serializable {
@@ -74,7 +75,15 @@ public class JDBCTaskMetadata implements Serializable {
     }
 
     public JDBCTaskMetadata adjustWithDelay(Long dbOffset) {
-        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, startTime.plusSeconds(dbOffset), endTime.plusSeconds(dbOffset ));
+        try {
+            Instant newStartTime = this.startTime.plusSeconds(dbOffset);
+            Instant newEndTime = this.endTime.plusSeconds(dbOffset);
+            return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, newStartTime, newEndTime);
+        } catch (DateTimeException e){
+            String errorMessage =
+                    String.format("Could not adjust date times (start: %s, end: %s) with offset: %d", startTime, endTime, dbOffset);
+            throw new RuntimeException(errorMessage, e);
+        }
     }
 
     public JDBCTaskMetadata truncateToStart() {
