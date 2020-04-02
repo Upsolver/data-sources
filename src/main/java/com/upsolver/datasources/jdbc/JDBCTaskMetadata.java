@@ -1,13 +1,15 @@
 package com.upsolver.datasources.jdbc;
 
-import com.upsolver.common.datasources.TaskRange;
-import com.upsolver.datasources.jdbc.utils.InstantMath;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.time.DateTimeException;
 import java.time.Instant;
 
 public class JDBCTaskMetadata implements Serializable {
+
+    private Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private long inclusiveStart;
     private long exclusiveEnd;
@@ -75,14 +77,19 @@ public class JDBCTaskMetadata implements Serializable {
     }
 
     public JDBCTaskMetadata adjustWithDelay(Long dbOffset) {
+        Instant newStartTime = safePlusSeconds(this.startTime, dbOffset);
+        Instant newEndTime = safePlusSeconds(this.endTime, dbOffset);
+        return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, newStartTime, newEndTime);
+    }
+
+    private Instant safePlusSeconds(Instant time, Long offset) {
         try {
-            Instant newStartTime = this.startTime.plusSeconds(dbOffset);
-            Instant newEndTime = this.endTime.plusSeconds(dbOffset);
-            return new JDBCTaskMetadata(inclusiveStart, exclusiveEnd, newStartTime, newEndTime);
-        } catch (DateTimeException e){
+            return time.plusSeconds(offset);
+        } catch (DateTimeException e) {
             String errorMessage =
-                    String.format("Could not adjust date times (start: %s, end: %s) with offset: %d", startTime, endTime, dbOffset);
-            throw new RuntimeException(errorMessage, e);
+                    String.format("Could not adjust date times (start: %s, end: %s) with offset: %d", startTime, endTime, offset);
+            logger.error(errorMessage);
+            return (offset < 0) ? Instant.MIN : Instant.MAX;
         }
     }
 
