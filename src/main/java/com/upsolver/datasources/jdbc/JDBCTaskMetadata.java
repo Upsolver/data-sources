@@ -6,8 +6,12 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 public class JDBCTaskMetadata implements Serializable {
+
+    // remove a few days to avoid exceeding end in adjustments
+    static final Instant initalEndTime = Instant.MAX.minus(7, ChronoUnit.DAYS);
 
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
