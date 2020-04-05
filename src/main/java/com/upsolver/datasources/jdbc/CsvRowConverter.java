@@ -23,7 +23,8 @@ class CsvRowConverter implements RowConverter {
     @Override
     public void convertRow(String[] values, OutputStream os) throws IOException {
         for (int i = 0; i < values.length; i++) {
-            os.write(values[i].getBytes());
+            var value = values[i] != null ? values[i] : "";
+            os.write(value.getBytes());
             writeCommaOrNewLine(os, i);
         }
     }
