@@ -139,7 +139,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 new JDBCTaskMetadata(0L, Long.MAX_VALUE, Instant.EPOCH, toQueryTime(Instant.now()));
         Connection connection = getConnection();
         var result = queryData(sampleMetadata, 100, connection);
-        var rowReader = new RowReader(tableInfo, result, sampleMetadata, connection);
+        var rowReader = new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result), sampleMetadata, connection);
         var inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
@@ -316,6 +316,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
         var lastReadIncValue = new AtomicReference<>(runMetadatas.get(0).getInclusiveStart());
         var lastReadTime = new AtomicReference<>(runMetadatas.get(0).getStartTime());
+
+        // Value getter + Some of the code in RowReader are needed only because we insist on running a single query
+        // and using a single result set for all ranges. If we allow query per window a lot of the code can be simplified.
+        var valueGetter = new ResultSetValuesGetter(tableInfo, resultSet);
+
         for (int i = 0; i < wantedRanges.size(); i++) {
             final var isLast = i == wantedRanges.size() - 1;
             final var taskRange = wantedRanges.get(i);
@@ -326,7 +331,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     return taskRange;
                 }
 
-                private final RowReader rowReader = new RowReader(tableInfo, resultSet, metadata, connection);
+                private final RowReader rowReader = new RowReader(tableInfo, valueGetter, metadata, connection);
 
                 @Override
                 public Iterator<LoadedData> loadData() {

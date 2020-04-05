@@ -33,7 +33,7 @@ public class NamedPreparedStatment implements AutoCloseable {
             }
         });
 
-        prepStmt = conn.prepareStatement(finalSql, TYPE_SCROLL_INSENSITIVE);
+        prepStmt = conn.prepareStatement(finalSql);
     }
 
 
