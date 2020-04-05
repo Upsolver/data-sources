@@ -7,6 +7,7 @@ import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
+import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.*;
 import java.time.Instant;
@@ -32,7 +33,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private long dbTimezoneOffset;
     private long overallQueryTimeAdjustment;
 
-    private Connection connection = null;
+
+    private HikariDataSource ds = null;
+
 
     @Override
     public DataSourceDescription getDataSourceDescription() {
@@ -46,15 +49,16 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     @Override
     public void setProperties(Map<String, String> properties) {
+        ds = new HikariDataSource();
         String connectionString = properties.get(connectionStringProp);
-        String userName = properties.get(userNameProp);
-        String password = properties.get(passwordProp);
+        ds.setJdbcUrl(connectionString);
+        ds.setUsername(properties.get(userNameProp));
+        ds.setPassword(properties.get(passwordProp));
 
-        try {
+        try (Connection con = getConnection()) {
             readDelay = Long.parseLong(properties.getOrDefault(readDelayProp, "0"));
-            connection = DriverManager.getConnection(connectionString, userName, password);
-            queryDialect = QueryDialectProvider.forConnection(connection);
-            DatabaseMetaData metadata = connection.getMetaData();
+            queryDialect = QueryDialectProvider.forConnection(connectionString);
+            DatabaseMetaData metadata = con.getMetaData();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
             tableInfo = loadTableInfo(metadata, properties.get(tableNameProp));
             var allTimeColumns = new HashSet<String>();
@@ -76,7 +80,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             if (filteredTimestampColumns.length != 0) {
                 tableInfo.setTimeColumns(filteredTimestampColumns);
             }
-            dbTimezoneOffset = queryDialect.utcOffset(connection);
+            dbTimezoneOffset = queryDialect.utcOffset(con);
             overallQueryTimeAdjustment = dbTimezoneOffset - readDelay;
         } catch (Exception e) {
             throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
@@ -133,11 +137,20 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public CompletionStage<LoadedData> getSample() {
         JDBCTaskMetadata sampleMetadata =
                 new JDBCTaskMetadata(0L, Long.MAX_VALUE, Instant.EPOCH, toQueryTime(Instant.now()));
-        var result = queryData(sampleMetadata, 100);
-        var rowReader = new RowReader(tableInfo, result, sampleMetadata);
+        Connection connection = getConnection();
+        var result = queryData(sampleMetadata, 100, connection);
+        var rowReader = new RowReader(tableInfo, result, sampleMetadata, connection);
         var inputStream = new ResultSetInputStream(tableInfo, rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
+    }
+
+    private Connection getConnection() {
+        try {
+            return ds.getConnection();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to get connection", e);
+        }
     }
 
     private Instant toQueryTime(Instant time) {
@@ -148,13 +161,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return time.minusSeconds(dbTimezoneOffset);
     }
 
-    private ResultSet queryData(JDBCTaskMetadata metadata, int limit) {
+    private ResultSet queryData(JDBCTaskMetadata metadata, int limit, Connection connection) {
         try {
             if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
                     return queryDialect.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
                 } else {
-                    return this.queryDialect.queryByTime(this.tableInfo, metadata, limit, this.connection).executeQuery();
+                    return this.queryDialect.queryByTime(this.tableInfo, metadata, limit, connection).executeQuery();
                 }
             } else {
                 return queryDialect.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
@@ -163,7 +176,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             throw new RuntimeException("Error while reading table", e);
         }
     }
-
 
     @Override
     public List<PropertyError> validate(Map<String, String> properties) {
@@ -252,8 +264,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             var queryMetadata = new JDBCTaskMetadata(firstMetadata.getInclusiveStart(), lastMetadata.getExclusiveEnd(),
                     firstMetadata.getStartTime(), lastMetadata.getEndTime())
                     .adjustWithDelay(dbTimezoneOffset);
-            var resultSet = queryData(queryMetadata, -1);
-            return splitData(resultSet, wantedRanges, runMetadatas);
+            var connection = getConnection();
+            var resultSet = queryData(queryMetadata, -1, connection);
+            return splitData(resultSet, wantedRanges, runMetadatas, connection);
         }
     }
 
@@ -298,7 +311,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> splitData(ResultSet resultSet,
                                                                               List<TaskRange> wantedRanges,
-                                                                              List<JDBCTaskMetadata> runMetadatas) {
+                                                                              List<JDBCTaskMetadata> runMetadatas,
+                                                                              Connection connection) {
         var result = new ArrayList<DataLoader<JDBCTaskMetadata>>();
         var lastReadIncValue = new AtomicReference<>(runMetadatas.get(0).getInclusiveStart());
         var lastReadTime = new AtomicReference<>(runMetadatas.get(0).getStartTime());
@@ -312,7 +326,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     return taskRange;
                 }
 
-                private final RowReader rowReader = new RowReader(tableInfo, resultSet, metadata);
+                private final RowReader rowReader = new RowReader(tableInfo, resultSet, metadata, connection);
 
                 @Override
                 public Iterator<LoadedData> loadData() {
@@ -351,7 +365,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var previous = previousTaskMetadata != null ?
                 previousTaskMetadata : new JDBCTaskMetadata(0, 0);
         var startFrom = previous.getExclusiveEnd();
-        try (var statement = getTaskInfoQuery(previous, taskRange)) {
+        try (var connection = getConnection(); var statement = getTaskInfoQuery(previous, taskRange, connection)) {
             var rs = statement.executeQuery();
             if (rs.next()) {
                 var max = tableInfo.hasIncColumn() ? rs.getLong("max") : 0;
@@ -368,7 +382,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         }
     }
 
-    private NamedPreparedStatment getTaskInfoQuery(JDBCTaskMetadata metadata, TaskRange taskRange) throws SQLException {
+    private NamedPreparedStatment getTaskInfoQuery(JDBCTaskMetadata metadata,
+                                                   TaskRange taskRange,
+                                                   Connection connection) throws SQLException {
         if (tableInfo.hasTimeColumns()) {
             Instant maxTime = toQueryTime(taskRange.getExclusiveEndTime());
             if (tableInfo.getIncColumn() != null) {
