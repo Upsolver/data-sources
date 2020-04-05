@@ -140,7 +140,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         Connection connection = getConnection();
         var result = queryData(sampleMetadata, 100, connection);
         var rowReader = new RowReader(tableInfo, result, sampleMetadata, connection);
-        var inputStream = new ResultSetInputStream(tableInfo, rowReader, true);
+        var inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
     }
@@ -330,7 +330,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
                 @Override
                 public Iterator<LoadedData> loadData() {
-                    ResultSetInputStream inputStream = new ResultSetInputStream(tableInfo, rowReader, isLast);
+                    ResultSetInputStream inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, isLast);
                     var result = new LoadedData(inputStream, new HashMap<>(), taskRange.getInclusiveStartTime());
                     return Collections.singleton(result).iterator();
                 }
