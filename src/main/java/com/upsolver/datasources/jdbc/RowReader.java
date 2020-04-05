@@ -2,6 +2,7 @@ package com.upsolver.datasources.jdbc;
 
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -12,17 +13,23 @@ public class RowReader implements AutoCloseable {
     private final JDBCTaskMetadata metadata;
     private final Timestamp timeLimit;
     private final Timestamp lowerTimeLimit;
+    private Connection connection;
 
     private boolean readValues;
     private long lastIncValue;
     private Timestamp lastTimestampValue;
 
-    public RowReader(TableInfo tableInfo, ResultSet underlying, JDBCTaskMetadata metadata) {
+    /**
+     * Exposes a similar interface to ResultSet but allows us to limit reading.
+     * Gets the connection to close after reading is complete. Closing the connection returns it to the connection pool
+     */
+    public RowReader(TableInfo tableInfo, ResultSet underlying, JDBCTaskMetadata metadata, Connection connection) {
         this.tableInfo = tableInfo;
         this.underlying = underlying;
         this.metadata = metadata;
         this.timeLimit = Timestamp.from(metadata.getEndTime());
         this.lowerTimeLimit = Timestamp.from(metadata.getStartTime());
+        this.connection = connection;
     }
 
     public boolean next() throws SQLException {
@@ -93,5 +100,6 @@ public class RowReader implements AutoCloseable {
     @Override
     public void close() throws Exception {
         underlying.close();
+        connection.close();
     }
 }

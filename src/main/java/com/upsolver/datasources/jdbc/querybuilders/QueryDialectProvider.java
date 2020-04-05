@@ -4,9 +4,8 @@ import java.sql.Connection;
 
 public class QueryDialectProvider {
 
-    public static QueryDialect forConnection(Connection connection) {
-        var driverName = connection.getClass().getName();
-        if (driverName.contains("sqlserver")) {
+    public static QueryDialect forConnection(String connectionString) {
+        if (connectionString.toLowerCase().contains("sqlserver")) {
             return new SqlServerQueryDialect();
         }
         return new DefaultQueryDialect();
