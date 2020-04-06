@@ -23,10 +23,20 @@ class CsvRowConverter implements RowConverter {
     @Override
     public void convertRow(String[] values, OutputStream os) throws IOException {
         for (int i = 0; i < values.length; i++) {
-            var value = values[i] != null ? values[i] : "";
+            var value = getEscapedValue(values, i);
             os.write(value.getBytes());
             writeCommaOrNewLine(os, i);
         }
+    }
+
+    private String getEscapedValue(String[] values, int i) {
+        var v =  values[i] != null ? values[i] : "";
+        if (v.contains(",")){
+            return '"' + v.replaceAll("\"", "\"\"") + '"';
+        } else {
+            return v;
+        }
+
     }
 
     private void writeCommaOrNewLine(OutputStream byteArrayOutputStream, int i) throws IOException {
