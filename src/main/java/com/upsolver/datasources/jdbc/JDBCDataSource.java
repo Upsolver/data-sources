@@ -8,6 +8,8 @@ import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.Instant;
@@ -18,6 +20,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBCTaskMetadata> {
+
+
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
 
     private static final String connectionStringProp = "Connection String";
     private static final String tableNameProp = "Table Name";
@@ -83,17 +89,15 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             dbTimezoneOffset = queryDialect.utcOffset(con);
             overallQueryTimeAdjustment = dbTimezoneOffset - readDelay;
         } catch (Exception e) {
-            throw new RuntimeException("Unable to connect to '" + connectionString + "'", e);
+            logger.error("Unable to set configuration", e);
+            throw new RuntimeException("Unable to set configuration: " + connectionString + "'", e);
         }
     }
 
 
-    private boolean isAutoInc(ResultSet columns) throws SQLException {
-        return "yes".equalsIgnoreCase(columns.getString("IS_AUTOINCREMENT"));
-    }
-
     private TableInfo loadTableInfo(DatabaseMetaData metadata, String tableName) throws SQLException {
-        var tables = metadata.getTables(null, null, tableName, new String[]{"TABLE"});
+        var fixedTableName = queryDialect.requiresUppercaseNames() ? tableName.toUpperCase() : tableName;
+        var tables = metadata.getTables(null, null, fixedTableName, new String[]{"TABLE"});
         if (tables.next()) {
             var columns = new ArrayList<ColumnInfo>();
             String catalog = tables.getString(1);
@@ -105,12 +109,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 String colName = columnRs.getString("COLUMN_NAME");
                 int type = columnRs.getInt("DATA_TYPE");
                 var sqlType = JDBCType.valueOf(type);
-                columns.add(new ColumnInfo(colName, sqlType, isAutoInc(columnRs)));
+                columns.add(new ColumnInfo(colName, sqlType, queryDialect.isAutoIncrementColumn(columnRs)));
             }
 
             return new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
         } else {
-            throw new IllegalArgumentException("Could not find table with name: " + tableName);
+            throw new IllegalArgumentException("Could not find table with name: " + fixedTableName);
         }
 
     }
@@ -173,6 +177,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 return queryDialect.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
             }
         } catch (Exception e) {
+            logger.error("Error reading table", e);
             throw new RuntimeException("Error while reading table", e);
         }
     }
@@ -183,6 +188,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
         var timestampColString = properties.get(timestampColumnsProp);
+        queryDialect = QueryDialectProvider.forConnection(connectionString);
         var timestampCols =
                 timestampColString != null ?
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];

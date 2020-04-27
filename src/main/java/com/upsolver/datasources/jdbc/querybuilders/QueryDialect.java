@@ -6,12 +6,17 @@ import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 
 public interface QueryDialect {
 
     long utcOffset(Connection connection) throws SQLException;
+
+    boolean requiresUppercaseNames();
+
+    boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
 
     NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
                                         JDBCTaskMetadata metadata,
