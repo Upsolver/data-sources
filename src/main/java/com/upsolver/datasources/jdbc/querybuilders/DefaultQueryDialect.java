@@ -6,6 +6,7 @@ import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 
@@ -38,7 +39,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                                 JDBCTaskMetadata metadata,
                                                 Instant maxTime,
                                                 Connection connection) throws SQLException {
-        String coalescedTimes = coalesce(tableInfo.getTimeColumnsAsString());
+        String coalescedTimes = coalesceTimeColumns(tableInfo);
         String query = "SELECT MAX(" + coalescedTimes + ") AS last_time" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + coalescedTimes + " < :maxTime" +
@@ -55,7 +56,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                                       JDBCTaskMetadata metadata,
                                                       Instant maxTime,
                                                       Connection connection) throws SQLException {
-        String coalescedTimes = coalesce(tableInfo.getTimeColumnsAsString());
+        String coalescedTimes = coalesceTimeColumns(tableInfo);
         String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
                 " MAX(" + tableInfo.getIncColumn() + ") AS max," +
                 " MAX(" + coalescedTimes + ") AS last_time" +
@@ -76,12 +77,13 @@ public class DefaultQueryDialect implements QueryDialect {
                                                    JDBCTaskMetadata metadata,
                                                    int limit,
                                                    Connection connection) throws SQLException {
-        String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
+        String coalesce = coalesceTimeColumns(tableInfo);
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + coalesce + " < :endTime" +
                 " AND ((" + coalesce + " = :startTime AND " + tableInfo.getIncColumn() + " >= :incStart)" +
                 " OR (" + coalesce + " > :startTime))" +
+                rownumCondition(limit, true) +
                 " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
@@ -97,10 +99,11 @@ public class DefaultQueryDialect implements QueryDialect {
                                              JDBCTaskMetadata metadata,
                                              int limit,
                                              Connection connection) throws SQLException {
-        String coalesce = coalesce(tableInfo.getTimeColumnsAsString());
+        String coalesce = coalesceTimeColumns(tableInfo);
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
+                rownumCondition(limit, true) +
                 " ORDER BY " + coalesce + " ASC" +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
@@ -118,6 +121,7 @@ public class DefaultQueryDialect implements QueryDialect {
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + tableInfo.getName() +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
+                rownumCondition(limit, true) +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
         statement.setLong("incStart", metadata.getInclusiveStart());
@@ -138,11 +142,29 @@ public class DefaultQueryDialect implements QueryDialect {
         return "COALESCE(" + columns + ")";
     }
 
+    private String coalesceTimeColumns(TableInfo tableInfo) {
+        return tableInfo.getTimeColumns().length > 1 ? coalesce(tableInfo.getTimeColumnsAsString()) : tableInfo.getTimeColumnsAsString();
+    }
+
     protected String topLimit(long amount) {
         return "";
     }
 
+    protected String rownumCondition(long amount, boolean includeAnd) {
+        return "";
+    }
+
+    @Override
+    public boolean requiresUppercaseNames() {
+        return false;
+    }
+
     protected String endLimit(long amount) {
         return amount >= 0 ? "limit " + amount : "";
+    }
+
+    @Override
+    public boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException {
+        return "yes".equalsIgnoreCase(columnsResultSet.getString("IS_AUTOINCREMENT"));
     }
 }
