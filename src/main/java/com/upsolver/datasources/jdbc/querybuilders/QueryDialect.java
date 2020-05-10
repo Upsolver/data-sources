@@ -18,6 +18,8 @@ public interface QueryDialect {
 
     boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
 
+    String fullTableName(TableInfo tableInfo);
+
     NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
                                         JDBCTaskMetadata metadata,
                                         Connection connection) throws SQLException;

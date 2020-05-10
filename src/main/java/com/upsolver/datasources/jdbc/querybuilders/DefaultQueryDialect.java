@@ -26,7 +26,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                                Connection connection) throws SQLException {
         String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
                 " MAX(" + tableInfo.getIncColumn() + ") AS max" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + tableInfo.getIncColumn() + " >= :startFrom" +
                 " HAVING MIN( " + tableInfo.getIncColumn() + ") IS NOT NULL";
         var statement = new NamedPreparedStatment(connection, query);
@@ -41,7 +41,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                                 Connection connection) throws SQLException {
         String coalescedTimes = coalesceTimeColumns(tableInfo);
         String query = "SELECT MAX(" + coalescedTimes + ") AS last_time" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalescedTimes + " < :maxTime" +
                 " AND " + coalescedTimes + " > :startTime" +
                 " HAVING MAX( " + coalescedTimes + ") IS NOT NULL";
@@ -60,7 +60,7 @@ public class DefaultQueryDialect implements QueryDialect {
         String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
                 " MAX(" + tableInfo.getIncColumn() + ") AS max," +
                 " MAX(" + coalescedTimes + ") AS last_time" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalescedTimes + " < :maxTime" +
                 " AND ((" + coalescedTimes + " = :startTime AND " + tableInfo.getIncColumn() + " >= :startFrom)" +
                 " OR (" + coalescedTimes + " > :startTime))" +
@@ -79,7 +79,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                                    Connection connection) throws SQLException {
         String coalesce = coalesceTimeColumns(tableInfo);
         String query = "SELECT " + topLimit(limit) + " *" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalesce + " < :endTime" +
                 " AND ((" + coalesce + " = :startTime AND " + tableInfo.getIncColumn() + " >= :incStart)" +
                 " OR (" + coalesce + " > :startTime))" +
@@ -101,7 +101,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                              Connection connection) throws SQLException {
         String coalesce = coalesceTimeColumns(tableInfo);
         String query = "SELECT " + topLimit(limit) + " *" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
                 rownumCondition(limit, true) +
                 " ORDER BY " + coalesce + " ASC" +
@@ -119,7 +119,7 @@ public class DefaultQueryDialect implements QueryDialect {
                                             int limit,
                                             Connection connection) throws SQLException {
         String query = "SELECT " + topLimit(limit) + " *" +
-                " FROM " + tableInfo.getName() +
+                " FROM " + fullTableName(tableInfo) +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
                 rownumCondition(limit, true) +
                 " " + endLimit(limit);
@@ -166,5 +166,14 @@ public class DefaultQueryDialect implements QueryDialect {
     @Override
     public boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException {
         return "yes".equalsIgnoreCase(columnsResultSet.getString("IS_AUTOINCREMENT"));
+    }
+
+    @Override
+    public String fullTableName(TableInfo tableInfo) {
+        if(tableInfo.getSchema() != null  && !tableInfo.getSchema().isEmpty()){
+            return tableInfo.getSchema() + "." + tableInfo.getName();
+        } else {
+            return tableInfo.getName();
+        }
     }
 }
