@@ -95,9 +95,23 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
 
+    private String[] getSupportedTableTypes(DatabaseMetaData metaData) throws SQLException {
+        var result = new ArrayList<String>();
+        var rs = metaData.getTableTypes();
+        while (rs.next()) {
+            var type = rs.getString("TABLE_TYPE").toUpperCase();
+            if (type.equals("TABLE") /*|| type.equals("SYNONYM")*/) {
+                result.add(type);
+            }
+        }
+        String[] arr = new String[result.size()];
+        return result.toArray(arr);
+    }
+
     private TableInfo loadTableInfo(DatabaseMetaData metadata, String tableName) throws SQLException {
         var fixedTableName = queryDialect.requiresUppercaseNames() ? tableName.toUpperCase() : tableName;
-        var tables = metadata.getTables(null, null, fixedTableName, new String[]{"TABLE"});
+        var supportedTableTypes = getSupportedTableTypes(metadata);
+        var tables = metadata.getTables(null, null, fixedTableName, supportedTableTypes);
         if (tables.next()) {
             var columns = new ArrayList<ColumnInfo>();
             String catalog = tables.getString(1);
