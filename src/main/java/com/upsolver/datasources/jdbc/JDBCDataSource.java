@@ -26,6 +26,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
 
     private static final String connectionStringProp = "Connection String";
+    private static final String schemaPatternProp = "Schema Pattern";
     private static final String tableNameProp = "Table Name";
     private static final String incrementingColumnNameProp = "Incrementing Column";
     private static final String timestampColumnsProp = "Timestamp Columns";
@@ -66,7 +67,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             queryDialect = QueryDialectProvider.forConnection(connectionString);
             DatabaseMetaData metadata = con.getMetaData();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
-            tableInfo = loadTableInfo(metadata, properties.get(tableNameProp));
+            tableInfo = loadTableInfo(metadata, properties.getOrDefault(schemaPatternProp, null), properties.get(tableNameProp));
             var allTimeColumns = new HashSet<String>();
             if (userProvidedIncColumn != null) {
                 tableInfo.setIncColumn(userProvidedIncColumn);
@@ -108,10 +109,10 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return result.toArray(arr);
     }
 
-    private TableInfo loadTableInfo(DatabaseMetaData metadata, String tableName) throws SQLException {
+    private TableInfo loadTableInfo(DatabaseMetaData metadata, String schemaPattern, String tableName) throws SQLException {
         var fixedTableName = queryDialect.requiresUppercaseNames() ? tableName.toUpperCase() : tableName;
         var supportedTableTypes = getSupportedTableTypes(metadata);
-        var tables = metadata.getTables(null, null, fixedTableName, supportedTableTypes);
+        var tables = metadata.getTables(null, schemaPattern, fixedTableName, supportedTableTypes);
         if (tables.next()) {
             var columns = new ArrayList<ColumnInfo>();
             String catalog = tables.getString(1);
@@ -139,6 +140,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         result.add(new SimplePropertyDescription(connectionStringProp, "The connection string that will be used to connect to the database", false));
         result.add(new SimplePropertyDescription(userNameProp, "The user name to connect with", false));
         result.add(new SimplePropertyDescription(passwordProp, "The password to connect with", false, true));
+        result.add(new SimplePropertyDescription(schemaPatternProp, "A schema name pattern; must match the schema name as it is stored in the database; \"\" retrieves those without a schema; empty means that the schema name should not be used to narrow the search for the table", true));
         result.add(new SimplePropertyDescription(tableNameProp, "The name of the table to read from", false));
         result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", true));
         result.add(new SimplePropertyDescription(timestampColumnsProp, "Comma separated list of timestamp columns to use for loading new rows. The fist non-null value will be used. At least one of the values must not be null for each row", true));
@@ -208,6 +210,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
         try (var connection = DriverManager.getConnection(connectionString, user, pass)) {
             return validateTableInfo(connection,
+                    properties.getOrDefault(schemaPatternProp, null),
                     properties.get(tableNameProp),
                     properties.get(incrementingColumnNameProp),
                     timestampCols);
@@ -219,6 +222,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     private List<PropertyError> validateTableInfo(Connection connection,
+                                                  String schemaPattern,
                                                   String tableName,
                                                   String incColumn,
                                                   String[] timestampColumns) {
@@ -226,7 +230,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
         try {
             var connectionMetadata = connection.getMetaData();
-            var tableInfo = loadTableInfo(connectionMetadata, tableName);
+            var tableInfo = loadTableInfo(connectionMetadata, schemaPattern, tableName);
             if (incColumn != null) {
                 var autoInc = tableInfo.getColumn(incColumn);
                 if (autoInc == null) {
@@ -256,7 +260,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 }
             }
         } catch (IllegalArgumentException e) {
-            result.add(new PropertyError(tableNameProp, "Could load table with name: '" + tableName + "'. " + e.getMessage()));
+            result.add(new PropertyError(tableNameProp, "Could not load table with name: '" + tableName + "'. " + e.getMessage()));
         } catch (SQLException e) {
             throw new RuntimeException("Failed to get table info", e);
         }
