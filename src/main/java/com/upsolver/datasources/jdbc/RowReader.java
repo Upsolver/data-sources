@@ -3,17 +3,17 @@ package com.upsolver.datasources.jdbc;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 
 import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 
 public class RowReader implements AutoCloseable {
     private final TableInfo tableInfo;
-    private ResultSetValuesGetter valuesGetter;
+    private final ResultSetValuesGetter valuesGetter;
     private final JDBCTaskMetadata metadata;
     private final Timestamp timeLimit;
     private final Timestamp lowerTimeLimit;
-    private Connection connection;
+    private final Connection connection;
+    private final boolean readAll;
 
     private boolean readValues;
     private long lastIncValue;
@@ -23,18 +23,23 @@ public class RowReader implements AutoCloseable {
      * Exposes a similar interface to ResultSet but allows us to limit reading.
      * Gets the connection to close after reading is complete. Closing the connection returns it to the connection pool
      */
-    public RowReader(TableInfo tableInfo, ResultSetValuesGetter valuesGetter, JDBCTaskMetadata metadata, Connection connection) {
+    public RowReader(TableInfo tableInfo,
+                     ResultSetValuesGetter valuesGetter,
+                     JDBCTaskMetadata metadata,
+                     Connection connection,
+                     boolean readAll) {
         this.tableInfo = tableInfo;
         this.valuesGetter = valuesGetter;
         this.metadata = metadata;
         this.timeLimit = Timestamp.from(metadata.getEndTime());
         this.lowerTimeLimit = Timestamp.from(metadata.getStartTime());
         this.connection = connection;
+        this.readAll = readAll;
     }
 
     public boolean next() throws SQLException {
         var result = valuesGetter.next();
-        if (result) {
+        if (result && !readAll) {
             var newTimestamp = tableInfo.hasTimeColumns() ? valuesGetter.extractTimestamp() : null;
             var newIncValue = tableInfo.hasIncColumn() ? valuesGetter.extractIncValue() : 0L;
             if (exceedsLimits(newTimestamp, newIncValue)) {
