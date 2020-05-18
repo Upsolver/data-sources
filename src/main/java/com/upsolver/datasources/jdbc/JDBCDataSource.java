@@ -31,10 +31,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String incrementingColumnNameProp = "Incrementing Column";
     private static final String timestampColumnsProp = "Timestamp Columns";
     private static final String readDelayProp = "Read Delay";
+    private static final String fullLoadIntervalProp = "Full Load Interval";
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
 
     private long readDelay;
+    private long fullLoadIntervalMinutes;
     private TableInfo tableInfo;
     private QueryDialect queryDialect;
     private long dbTimezoneOffset;
@@ -43,6 +45,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private HikariDataSource ds = null;
 
+    private boolean isFullLoad() {
+        return fullLoadIntervalMinutes > 0;
+    }
 
     @Override
     public DataSourceDescription getDataSourceDescription() {
@@ -64,6 +69,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
         try (Connection con = getConnection()) {
             readDelay = Long.parseLong(properties.getOrDefault(readDelayProp, "0"));
+            fullLoadIntervalMinutes = Long.parseLong(properties.getOrDefault(fullLoadIntervalProp, "0"));
             queryDialect = QueryDialectProvider.forConnection(connectionString);
             DatabaseMetaData metadata = con.getMetaData();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
@@ -145,6 +151,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", true));
         result.add(new SimplePropertyDescription(timestampColumnsProp, "Comma separated list of timestamp columns to use for loading new rows. The fist non-null value will be used. At least one of the values must not be null for each row", true));
         result.add(new SimplePropertyDescription(readDelayProp, "How long (in seconds) to wait before reading rows based on their timestamp. This allows waiting for all transactions of a certain timestamp to complete to avoid loading partial data. Default value is 0", true));
+        result.add(new SimplePropertyDescription(fullLoadIntervalProp, "If set the full table will be read every configured interval (in minutes). When this is configured the update time and incrementing columns are not used.", true));
         return result;
     }
 
@@ -159,7 +166,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 new JDBCTaskMetadata(0L, Long.MAX_VALUE, Instant.EPOCH, toQueryTime(Instant.now()));
         Connection connection = getConnection();
         var result = queryData(sampleMetadata, 100, connection);
-        var rowReader = new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result), sampleMetadata, connection);
+        var rowReader =
+                new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result), sampleMetadata, connection, true);
         var inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
@@ -183,7 +191,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private ResultSet queryData(JDBCTaskMetadata metadata, int limit, Connection connection) {
         try {
-            if (tableInfo.hasTimeColumns()) {
+            if (isFullLoad()) {
+                return queryDialect.queryFullTable(tableInfo, metadata, limit, connection).executeQuery();
+            } else if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
                     return queryDialect.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
                 } else {
@@ -205,6 +215,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var pass = properties.get(passwordProp);
         var timestampColString = properties.get(timestampColumnsProp);
         queryDialect = QueryDialectProvider.forConnection(connectionString);
+        var fullLoad = !properties.getOrDefault(fullLoadIntervalProp, "0").equals("0");
         var timestampCols =
                 timestampColString != null ?
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
@@ -213,7 +224,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     properties.getOrDefault(schemaPatternProp, null),
                     properties.get(tableNameProp),
                     properties.get(incrementingColumnNameProp),
-                    timestampCols);
+                    timestampCols,
+                    fullLoad);
         } catch (SQLException e) {
             return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct.\n" +
                     "SqlError: " + e.getMessage()));
@@ -225,38 +237,42 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                                                   String schemaPattern,
                                                   String tableName,
                                                   String incColumn,
-                                                  String[] timestampColumns) {
+                                                  String[] timestampColumns,
+                                                  boolean fullLoad) {
         var result = new ArrayList<PropertyError>();
 
         try {
             var connectionMetadata = connection.getMetaData();
+            // Always load table info to confirm table exists
             var tableInfo = loadTableInfo(connectionMetadata, schemaPattern, tableName);
-            if (incColumn != null) {
-                var autoInc = tableInfo.getColumn(incColumn);
-                if (autoInc == null) {
-                    result.add(new PropertyError(incrementingColumnNameProp, "Could not find increment column " + incColumn));
-                } else if (!autoInc.isIncCol()) {
-                    result.add(new PropertyError(incrementingColumnNameProp, "Column " + incColumn + " is not an auto-inc column"));
-                }
-            }
-            var foundTimeCol = false;
-            for (String timestampColumn : timestampColumns) {
-                var col = tableInfo.getColumn(timestampColumn);
-                if (col != null) {
-                    if (col.isTimeType()) {
-                        foundTimeCol = true;
-                    } else {
-                        result.add(new PropertyError(timestampColumnsProp, "Column '" + timestampColumn + "' is not a timestamp columns"));
+            if (!fullLoad) {
+                if (incColumn != null) {
+                    var autoInc = tableInfo.getColumn(incColumn);
+                    if (autoInc == null) {
+                        result.add(new PropertyError(incrementingColumnNameProp, "Could not find increment column " + incColumn));
+                    } else if (!autoInc.isIncCol()) {
+                        result.add(new PropertyError(incrementingColumnNameProp, "Column " + incColumn + " is not an auto-inc column"));
                     }
                 }
-            }
-            if (timestampColumns.length > 0 && !foundTimeCol) {
-                result.add(new PropertyError(timestampColumnsProp, "Non of the provided timestamp columns exist in the table"));
-            }
-            if (timestampColumns.length == 0) {
-                if (Arrays.stream(tableInfo.getColumns()).noneMatch(ColumnInfo::isIncCol)) {
-                    result.add(new PropertyError(timestampColumnsProp,
-                            "The table has no auto-incrementing column, you must provide update time columns to use"));
+                var foundTimeCol = false;
+                for (String timestampColumn : timestampColumns) {
+                    var col = tableInfo.getColumn(timestampColumn);
+                    if (col != null) {
+                        if (col.isTimeType()) {
+                            foundTimeCol = true;
+                        } else {
+                            result.add(new PropertyError(timestampColumnsProp, "Column '" + timestampColumn + "' is not a timestamp columns"));
+                        }
+                    }
+                }
+                if (timestampColumns.length > 0 && !foundTimeCol) {
+                    result.add(new PropertyError(timestampColumnsProp, "Non of the provided timestamp columns exist in the table"));
+                }
+                if (timestampColumns.length == 0) {
+                    if (Arrays.stream(tableInfo.getColumns()).noneMatch(ColumnInfo::isIncCol)) {
+                        result.add(new PropertyError(timestampColumnsProp,
+                                "The table has no auto-incrementing column, you must provide update time columns to use"));
+                    }
                 }
             }
         } catch (IllegalArgumentException e) {
@@ -276,12 +292,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                                                                                   ShardDefinition shardDefinition) {
         var taskCount = completedRanges.size() + wantedRanges.size();
         var itemsPerTask = (taskInfo.getMetadata().itemsPerTask(taskCount));
-        if (!tableInfo.hasTimeColumns() && itemsPerTask == 0) {
+        var emptyFullLoad = isFullLoad() && wantedRanges.stream().noneMatch(this::matchesLoadInterval);
+        var noDataToLoad = !isFullLoad() && !tableInfo.hasTimeColumns() && itemsPerTask == 0;
+        if (emptyFullLoad || noDataToLoad) {
             List<DataLoader<JDBCTaskMetadata>> result =
                     wantedRanges.stream().map(t -> new NoDataLoader(t, taskInfo.getMetadata())).collect(Collectors.toList());
             return CompletableFuture.completedFuture(result.iterator());
         } else {
-
             var runMetadatas = getRunMetadatas(taskInfo, taskCount, itemsPerTask, wantedRanges);
             var firstMetadata = runMetadatas.get(0);
             var lastMetadata = runMetadatas.get(runMetadatas.size() - 1);
@@ -294,6 +311,10 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         }
     }
 
+    private boolean matchesLoadInterval(TaskRange x) {
+        return x.getInclusiveStartTime().getEpochSecond() / 60 % fullLoadIntervalMinutes == 0;
+    }
+
     private List<JDBCTaskMetadata> getRunMetadatas(TaskInformation<JDBCTaskMetadata> taskInfo,
                                                    int taskCount,
                                                    double itemsPerTask,
@@ -301,7 +322,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var result = new ArrayList<JDBCTaskMetadata>();
         int wantedSize = wantedRanges.size();
         var wantedIndexStart = taskCount - wantedSize;
-        if (tableInfo.hasTimeColumns()) {
+        if (isFullLoad()) {
+            return wantedRanges.stream()
+                    .map(wr -> new JDBCTaskMetadata(0, 0, wr.getInclusiveStartTime(), wr.getExclusiveEndTime()))
+                    .collect(Collectors.toList());
+        } else if (tableInfo.hasTimeColumns()) {
             for (int i = 0; i < wantedSize; i++) {
                 var firstInBatch = i == 0 && taskCount == wantedSize;
                 TaskRange wantedRange = wantedRanges.get(i);
@@ -355,7 +380,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     return taskRange;
                 }
 
-                private final RowReader rowReader = new RowReader(tableInfo, valueGetter, metadata, connection);
+                private final RowReader rowReader = new RowReader(tableInfo, valueGetter, metadata, connection, isFullLoad() && matchesLoadInterval(taskRange) );
 
                 @Override
                 public Iterator<LoadedData> loadData() {

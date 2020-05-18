@@ -15,10 +15,11 @@ public class OracleQueryDialect extends DefaultQueryDialect {
     }
 
     @Override
-    protected String rownumCondition(long amount, boolean includeAnd) {
+    protected String rownumCondition(long amount, boolean includeAnd, boolean includeWhere) {
         if (amount >= 0) {
-            var and = includeAnd ? " AND " : "";
-            return and + " ROWNUM <= " + amount + " ";
+            var where = includeWhere ? " WHERE " : "";
+            var and = !includeWhere && includeAnd ? " AND " : "";
+            return where + and + " ROWNUM <= " + amount + " ";
         } else {
             return "";
         }

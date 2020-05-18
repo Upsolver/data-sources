@@ -25,9 +25,9 @@ public interface QueryDialect {
                                         Connection connection) throws SQLException;
 
     NamedPreparedStatment taskInfoByTime(TableInfo tableInfo,
-                                               JDBCTaskMetadata metadata,
-                                               Instant maxTime,
-                                               Connection connection) throws SQLException;
+                                         JDBCTaskMetadata metadata,
+                                         Instant maxTime,
+                                         Connection connection) throws SQLException;
 
     NamedPreparedStatment taskInfoByIncAndTime(TableInfo tableInfo,
                                                JDBCTaskMetadata metadata,
@@ -40,14 +40,19 @@ public interface QueryDialect {
                                             Connection connection) throws SQLException;
 
     NamedPreparedStatment queryByTime(TableInfo tableInfo,
-                                            JDBCTaskMetadata metadata,
-                                            int limit,
-                                            Connection connection) throws SQLException;
+                                      JDBCTaskMetadata metadata,
+                                      int limit,
+                                      Connection connection) throws SQLException;
 
     NamedPreparedStatment queryByInc(TableInfo tableInfo,
                                      JDBCTaskMetadata metadata,
                                      int limit,
                                      Connection connection) throws SQLException;
+
+    NamedPreparedStatment queryFullTable(TableInfo tableInfo,
+                                         JDBCTaskMetadata metadata,
+                                         int limit,
+                                         Connection connection) throws SQLException;
 
     PreparedStatement getCurrentTimestamp(Connection connection) throws SQLException;
 

@@ -83,7 +83,7 @@ public class DefaultQueryDialect implements QueryDialect {
                 " WHERE " + coalesce + " < :endTime" +
                 " AND ((" + coalesce + " = :startTime AND " + tableInfo.getIncColumn() + " >= :incStart)" +
                 " OR (" + coalesce + " > :startTime))" +
-                rownumCondition(limit, true) +
+                rownumCondition(limit, true, false) +
                 " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
@@ -103,7 +103,7 @@ public class DefaultQueryDialect implements QueryDialect {
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
-                rownumCondition(limit, true) +
+                rownumCondition(limit, true, false) +
                 " ORDER BY " + coalesce + " ASC" +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
@@ -121,12 +121,24 @@ public class DefaultQueryDialect implements QueryDialect {
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + fullTableName(tableInfo) +
                 " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
-                rownumCondition(limit, true) +
+                rownumCondition(limit, true, false) +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
         statement.setLong("incStart", metadata.getInclusiveStart());
         statement.setLong("incEnd", metadata.getExclusiveEnd() - 1);
         return statement;
+    }
+
+    @Override
+    public NamedPreparedStatment queryFullTable(TableInfo tableInfo,
+                                                JDBCTaskMetadata metadata,
+                                                int limit,
+                                                Connection connection) throws SQLException {
+        String query = "SELECT " + topLimit(limit) + " *" +
+                " FROM " + fullTableName(tableInfo) +
+                rownumCondition(limit, false, true) +
+                " " + endLimit(limit);
+        return new NamedPreparedStatment(connection, query);
     }
 
     @Override
@@ -150,7 +162,7 @@ public class DefaultQueryDialect implements QueryDialect {
         return "";
     }
 
-    protected String rownumCondition(long amount, boolean includeAnd) {
+    protected String rownumCondition(long amount, boolean includeAnd, boolean includeWhere) {
         return "";
     }
 
