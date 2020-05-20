@@ -8,7 +8,6 @@ import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 import com.zaxxer.hikari.HikariDataSource;
-import com.zaxxer.hikari.util.DriverDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,7 +67,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         ds = new HikariDataSource();
         String connectionString = properties.get(connectionStringProp);
         String connectionProperties = properties.get(connectionPropertiesProp);
-        if (!connectionProperties.isBlank()) {
+        if (connectionProperties != null && !connectionProperties.isBlank()) {
             Properties props = new Properties();
             try {
                 props.load(new StringReader(connectionProperties));
@@ -237,10 +236,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 timestampColString != null ?
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
         var connectionProps = new Properties();
-        try {
-            connectionProps.load(new StringReader(connectionProperties));
-        } catch (IOException e) {
-            return Collections.singletonList(new PropertyError(connectionPropertiesProp, "Unable to parse connection properties: \n" + e.getMessage()));
+        if (connectionProperties != null && !connectionProperties.isBlank()) {
+            try {
+                connectionProps.load(new StringReader(connectionProperties));
+            } catch (IOException e) {
+                return Collections.singletonList(new PropertyError(connectionPropertiesProp, "Unable to parse connection properties: \n" + e.getMessage()));
+            }
         }
         connectionProps.setProperty("user", connectionProps.getProperty("user", user));
         connectionProps.setProperty("password", connectionProps.getProperty("password", pass));
