@@ -8,9 +8,12 @@ import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.util.DriverDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.sql.*;
 import java.time.Instant;
 import java.util.*;
@@ -26,6 +29,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
 
     private static final String connectionStringProp = "Connection String";
+    private static final String connectionPropertiesProp = "Connection Properties";
     private static final String schemaPatternProp = "Schema Pattern";
     private static final String tableNameProp = "Table Name";
     private static final String incrementingColumnNameProp = "Incrementing Column";
@@ -63,6 +67,17 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public void setProperties(Map<String, String> properties) {
         ds = new HikariDataSource();
         String connectionString = properties.get(connectionStringProp);
+        String connectionProperties = properties.get(connectionPropertiesProp);
+        if (!connectionProperties.isBlank()) {
+            Properties props = new Properties();
+            try {
+                props.load(new StringReader(connectionProperties));
+                ds.setDataSourceProperties(props);
+            } catch (IOException e) {
+                logger.error("Unable to parse connection properties", e);
+                throw new RuntimeException("Unable to parse connection properties: '" + connectionProperties + "'", e);
+            }
+        }
         ds.setJdbcUrl(connectionString);
         ds.setUsername(properties.get(userNameProp));
         ds.setPassword(properties.get(passwordProp));
@@ -144,6 +159,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public List<PropertyDescription> getPropertyDescriptions() {
         ArrayList<PropertyDescription> result = new ArrayList<>();
         result.add(new SimplePropertyDescription(connectionStringProp, "The connection string that will be used to connect to the database", false));
+        result.add(new SimplePropertyDescription(connectionPropertiesProp, "Extra connection properties that will be used to connect to the database", true, false, new String[0], null, PropertyEditor.TEXT_AREA));
         result.add(new SimplePropertyDescription(userNameProp, "The user name to connect with", false));
         result.add(new SimplePropertyDescription(passwordProp, "The password to connect with", false, true));
         result.add(new SimplePropertyDescription(schemaPatternProp, "A schema name pattern; must match the schema name as it is stored in the database; \"\" retrieves those without a schema; empty means that the schema name should not be used to narrow the search for the table", true));
@@ -211,6 +227,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     @Override
     public List<PropertyError> validate(Map<String, String> properties) {
         var connectionString = properties.get(connectionStringProp);
+        var connectionProperties = properties.get(connectionPropertiesProp);
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
         var timestampColString = properties.get(timestampColumnsProp);
@@ -219,7 +236,16 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var timestampCols =
                 timestampColString != null ?
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
-        try (var connection = DriverManager.getConnection(connectionString, user, pass)) {
+        var connectionProps = new Properties();
+        try {
+            connectionProps.load(new StringReader(connectionProperties));
+        } catch (IOException e) {
+            return Collections.singletonList(new PropertyError(connectionPropertiesProp, "Unable to parse connection properties: \n" + e.getMessage()));
+        }
+        connectionProps.setProperty("user", connectionProps.getProperty("user", user));
+        connectionProps.setProperty("password", connectionProps.getProperty("password", pass));
+
+        try (var connection = DriverManager.getConnection(connectionString, connectionProps)) {
             return validateTableInfo(connection,
                     properties.getOrDefault(schemaPatternProp, null),
                     properties.get(tableNameProp),
