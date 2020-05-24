@@ -125,7 +125,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var rs = metaData.getTableTypes();
         while (rs.next()) {
             var type = rs.getString("TABLE_TYPE").toUpperCase();
-            if (type.equals("TABLE") /*|| type.equals("SYNONYM")*/) {
+            if (type.equals("TABLE") || type.equals("VIEW")) {
                 result.add(type);
             }
         }
