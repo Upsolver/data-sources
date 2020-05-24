@@ -46,6 +46,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private long overallQueryTimeAdjustment;
 
 
+    private final int connectionIdleTimeout = 90 * 1000;
     private HikariDataSource ds = null;
 
     private boolean isFullLoad() {
@@ -66,8 +67,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public void setProperties(Map<String, String> properties) {
         ds = new HikariDataSource();
         String connectionString = properties.get(connectionStringProp);
-        String connectionProperties = properties.get(connectionPropertiesProp);
-        if (connectionProperties != null && !connectionProperties.isBlank()) {
+        ds.setMaximumPoolSize(1);
+        ds.setIdleTimeout(connectionIdleTimeout);
+        ds.setMinimumIdle(0);
+        String connectionProperties = properties.getOrDefault(connectionPropertiesProp, "");
+        if (!connectionProperties.isBlank()) {
             Properties props = new Properties();
             try {
                 props.load(new StringReader(connectionProperties));
@@ -218,6 +222,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 return queryDialect.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
             }
         } catch (Exception e) {
+            try {
+                connection.close();
+            } catch (SQLException closeException) {
+                logger.error("Could not close connection", closeException);
+            }
             logger.error("Error reading table", e);
             throw new RuntimeException("Error while reading table", e);
         }
@@ -226,7 +235,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     @Override
     public List<PropertyError> validate(Map<String, String> properties) {
         var connectionString = properties.get(connectionStringProp);
-        var connectionProperties = properties.get(connectionPropertiesProp);
+        var connectionProperties = properties.getOrDefault(connectionPropertiesProp, "");
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
         var timestampColString = properties.get(timestampColumnsProp);
@@ -236,7 +245,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 timestampColString != null ?
                         Arrays.stream(timestampColString.split(",")).map(String::trim).toArray(String[]::new) : new String[0];
         var connectionProps = new Properties();
-        if (connectionProperties != null && !connectionProperties.isBlank()) {
+        if (!connectionProperties.isBlank()) {
             try {
                 connectionProps.load(new StringReader(connectionProperties));
             } catch (IOException e) {
@@ -407,7 +416,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     return taskRange;
                 }
 
-                private final RowReader rowReader = new RowReader(tableInfo, valueGetter, metadata, connection, isFullLoad() && matchesLoadInterval(taskRange) );
+                private final RowReader rowReader = new RowReader(tableInfo, valueGetter, metadata, connection, isFullLoad() && matchesLoadInterval(taskRange));
 
                 @Override
                 public Iterator<LoadedData> loadData() {
@@ -488,5 +497,11 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return new JDBCTaskMetadata(endValue, endValue, endTime, endTime);
     }
 
+    @Override
+    public void close() throws Exception {
+        if (ds != null) {
+            ds.close();
+        }
+    }
 }
 
