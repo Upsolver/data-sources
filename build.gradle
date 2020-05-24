@@ -26,6 +26,6 @@ dependencies {
     compile 'com.zaxxer:HikariCP:3.4.2'
     implementation 'org.slf4j:slf4j-api:1.7.30'
     testCompile group: 'junit', name: 'junit', version: '4.12'
-    implementation 'com.upsolver:data-sources-interfaces:1.0.4'
+    implementation 'com.upsolver:data-sources-interfaces:1.0.5'
 //    implementation fileTree(dir: '/tmp/p/com/upsolver/data-sources-interfaces/1.0.1/', include: '*.jar')
 }
