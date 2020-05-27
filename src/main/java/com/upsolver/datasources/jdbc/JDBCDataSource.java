@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.*;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -119,6 +120,14 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         }
     }
 
+    @Override
+    public Instant getStartTime() {
+        if (isFullLoad()) {
+            return Instant.now().minus(fullLoadIntervalMinutes, ChronoUnit.MINUTES);
+        } else {
+            return null;
+        }
+    }
 
     private String[] getSupportedTableTypes(DatabaseMetaData metaData) throws SQLException {
         var result = new ArrayList<String>();
