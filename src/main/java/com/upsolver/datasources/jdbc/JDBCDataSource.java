@@ -173,7 +173,6 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             dbTimezoneOffset = queryDialect.utcOffsetSeconds(con);
             overallQueryTimeAdjustment = dbTimezoneOffset - readDelay;
         } catch (Exception e) {
-            logger.error("Unable to set configuration", e);
             throw new RuntimeException("Unable to set configuration: " + connectionString + "'", e);
         }
     }
