@@ -56,4 +56,8 @@ public interface QueryDialect {
 
     PreparedStatement getCurrentTimestamp(Connection connection) throws SQLException;
 
+    Connection getConnection(String url, java.util.Properties info) throws SQLException;
+
+    String getDriverClassName();
+
 }
