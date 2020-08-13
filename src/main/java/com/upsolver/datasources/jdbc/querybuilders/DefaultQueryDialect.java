@@ -5,6 +5,7 @@ import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -187,5 +188,16 @@ public class DefaultQueryDialect implements QueryDialect {
         } else {
             return tableInfo.getName();
         }
+    }
+
+
+    @Override
+    public Connection getConnection(String url, java.util.Properties info) throws SQLException {
+        return DriverManager.getConnection(url, info);
+    }
+
+    @Override
+    public String getDriverClassName() {
+        return null;
     }
 }

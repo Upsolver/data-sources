@@ -1,6 +1,17 @@
 package com.upsolver.datasources.jdbc;
 
-import com.upsolver.common.datasources.*;
+import com.upsolver.common.datasources.DataLoader;
+import com.upsolver.common.datasources.DataSourceContentType;
+import com.upsolver.common.datasources.DataSourceDescription;
+import com.upsolver.common.datasources.ExternalDataSource;
+import com.upsolver.common.datasources.LoadedData;
+import com.upsolver.common.datasources.PropertyDescription;
+import com.upsolver.common.datasources.PropertyEditor;
+import com.upsolver.common.datasources.PropertyError;
+import com.upsolver.common.datasources.ShardDefinition;
+import com.upsolver.common.datasources.SimplePropertyDescription;
+import com.upsolver.common.datasources.TaskInformation;
+import com.upsolver.common.datasources.TaskRange;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
 import com.upsolver.datasources.jdbc.metadata.ColumnInfo;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
@@ -13,10 +24,23 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.StringReader;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.JDBCType;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,10 +110,15 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         ds.setUsername(properties.get(userNameProp));
         ds.setPassword(properties.get(passwordProp));
 
+        queryDialect = QueryDialectProvider.forConnection(connectionString);
+        String driverClassName = queryDialect.getDriverClassName();
+        if (driverClassName != null) {
+            ds.setDriverClassName(driverClassName);
+        }
+
         try (Connection con = getConnection()) {
             readDelay = Long.parseLong(properties.getOrDefault(readDelayProp, "0"));
             fullLoadIntervalMinutes = Long.parseLong(properties.getOrDefault(fullLoadIntervalProp, "0"));
-            queryDialect = QueryDialectProvider.forConnection(connectionString);
             DatabaseMetaData metadata = con.getMetaData();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
             tableInfo = loadTableInfo(metadata, properties.getOrDefault(schemaPatternProp, null), properties.get(tableNameProp));
@@ -264,7 +293,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         connectionProps.setProperty("user", connectionProps.getProperty("user", user));
         connectionProps.setProperty("password", connectionProps.getProperty("password", pass));
 
-        try (var connection = DriverManager.getConnection(connectionString, connectionProps)) {
+        try (var connection = queryDialect.getConnection(connectionString, connectionProps)) {
             return validateTableInfo(connection,
                     properties.getOrDefault(schemaPatternProp, null),
                     properties.get(tableNameProp),
