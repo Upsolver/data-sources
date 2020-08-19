@@ -5,7 +5,7 @@ import java.sql.SQLException;
 
 public class SqlServerQueryDialect extends DefaultQueryDialect {
     @Override
-    public long utcOffset(Connection connection) throws SQLException {
+    public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("SELECT DATEDIFF(second, GETDATE(), GETUTCDATE());").executeQuery();
         rs.next();
         return rs.getLong(1);
