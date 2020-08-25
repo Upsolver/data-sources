@@ -5,9 +5,11 @@ import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
 
 import java.sql.Connection;
+import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLType;
 import java.time.Instant;
 
 public interface QueryDialect {
@@ -17,6 +19,12 @@ public interface QueryDialect {
     boolean requiresUppercaseNames();
 
     boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
+
+    boolean isTimeType(SQLType sqlType) throws SQLException;
+
+    SQLType getSqlType(int code) throws SQLException;
+
+    SQLType getJdbcType(SQLType sqlType) throws SQLException;
 
     String fullTableName(TableInfo tableInfo);
 

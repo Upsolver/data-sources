@@ -1,17 +1,33 @@
 package com.upsolver.datasources.jdbc.querybuilders;
 
 import com.upsolver.datasources.jdbc.JDBCTaskMetadata;
+import com.upsolver.datasources.jdbc.metadata.SimpleSqlType;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLType;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
 
 public class DefaultQueryDialect implements QueryDialect {
+    private static final Logger logger = LoggerFactory.getLogger(DefaultQueryDialect.class);
+    private static final Collection<SQLType> timeTypes = new HashSet<>(Arrays.asList(
+            JDBCType.DATE,
+            JDBCType.TIMESTAMP,
+            JDBCType.TIME,
+            JDBCType.TIME_WITH_TIMEZONE,
+            JDBCType.TIMESTAMP_WITH_TIMEZONE
+    ));
 
     @Override
     public long utcOffset(Connection connection) throws SQLException {
@@ -179,6 +195,26 @@ public class DefaultQueryDialect implements QueryDialect {
     @Override
     public boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException {
         return "yes".equalsIgnoreCase(columnsResultSet.getString("IS_AUTOINCREMENT"));
+    }
+
+    @Override
+    public boolean isTimeType(SQLType sqlType) throws SQLException {
+        return timeTypes.contains(getJdbcType(sqlType));
+    }
+
+    @Override
+    public SQLType getSqlType(int code) throws SQLException {
+        try {
+            return JDBCType.valueOf(code);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Illegal data type {}", code);
+            return new SimpleSqlType("unknown", "default", code);
+        }
+    }
+
+    @Override
+    public SQLType getJdbcType(SQLType sqlType) {
+        return sqlType;
     }
 
     @Override
