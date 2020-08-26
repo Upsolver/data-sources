@@ -185,8 +185,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             while (columnRs.next()) {
                 String colName = columnRs.getString("COLUMN_NAME");
                 int type = columnRs.getInt("DATA_TYPE");
-                var sqlType = JDBCType.valueOf(type);
-                columns.add(new ColumnInfo(colName, sqlType, queryDialect.isAutoIncrementColumn(columnRs)));
+                var sqlType = queryDialect.getSqlType(type);
+                columns.add(new ColumnInfo(colName, sqlType, queryDialect.isAutoIncrementColumn(columnRs), queryDialect.isTimeType(sqlType)));
             }
 
             return new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
