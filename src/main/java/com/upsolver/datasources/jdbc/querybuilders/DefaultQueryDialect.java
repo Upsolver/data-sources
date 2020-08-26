@@ -33,7 +33,7 @@ public class DefaultQueryDialect implements QueryDialect {
     public long utcOffset(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP)").executeQuery();
         rs.next();
-        return rs.getTime(1).getSeconds();
+        return rs.getTime(1).getTime() / 1000L;
     }
 
 
