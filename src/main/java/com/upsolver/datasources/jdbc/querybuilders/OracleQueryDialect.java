@@ -20,7 +20,7 @@ public class OracleQueryDialect extends DefaultQueryDialect {
     ));
 
     @Override
-    public long utcOffset(Connection connection) throws SQLException {
+    public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs =
                 connection.prepareStatement("SELECT extract(day from (SYSTIMESTAMP - sys_extract_utc(systimestamp)) * 24 * 60 * 60) FROM DUAL")
                         .executeQuery();

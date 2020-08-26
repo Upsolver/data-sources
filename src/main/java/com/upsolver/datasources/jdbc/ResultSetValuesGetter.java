@@ -7,7 +7,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 
 class ResultSetValuesGetter implements AutoCloseable {
-    private TableInfo tableInfo;
+    private final TableInfo tableInfo;
     private final ResultSet underlying;
 
     private String[] nextValues = null;

@@ -124,24 +124,25 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             tableInfo = loadTableInfo(metadata, properties.getOrDefault(schemaPatternProp, null), properties.get(tableNameProp));
             var allTimeColumns = new HashSet<String>();
             if (userProvidedIncColumn != null) {
-                tableInfo.setIncColumn(userProvidedIncColumn);
+                tableInfo.setIncColumn(queryDialect.toUpperCaseIfRequired(userProvidedIncColumn));
             }
             for (ColumnInfo column : tableInfo.getColumns()) {
                 if (column.isTimeType()) {
                     allTimeColumns.add(column.getName().toUpperCase());
                 } else if (tableInfo.getIncColumn() == null && column.isIncCol()) {
-                    tableInfo.setIncColumn(column.getName());
+                    tableInfo.setIncColumn(queryDialect.toUpperCaseIfRequired(column.getName()));
                 }
             }
             String[] filteredTimestampColumns =
                     Arrays.stream(properties.getOrDefault(timestampColumnsProp, "").split(","))
                             .map(String::trim)
                             .filter(x -> allTimeColumns.contains(x.toUpperCase()))
+                            .map(f -> queryDialect.toUpperCaseIfRequired(f))
                             .toArray(String[]::new);
             if (filteredTimestampColumns.length != 0) {
                 tableInfo.setTimeColumns(filteredTimestampColumns);
             }
-            dbTimezoneOffset = queryDialect.utcOffset(con);
+            dbTimezoneOffset = queryDialect.utcOffsetSeconds(con);
             overallQueryTimeAdjustment = dbTimezoneOffset - readDelay;
         } catch (Exception e) {
             logger.error("Unable to set configuration", e);
@@ -172,9 +173,10 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     private TableInfo loadTableInfo(DatabaseMetaData metadata, String schemaPattern, String tableName) throws SQLException {
-        var fixedTableName = queryDialect.requiresUppercaseNames() ? tableName.toUpperCase() : tableName;
+        var fixedTableName = queryDialect.toUpperCaseIfRequired(tableName);
+        var fixedSchemaPattern = queryDialect.toUpperCaseIfRequired(schemaPattern);
         var supportedTableTypes = getSupportedTableTypes(metadata);
-        var tables = metadata.getTables(null, schemaPattern, fixedTableName, supportedTableTypes);
+        var tables = metadata.getTables(null, fixedSchemaPattern, fixedTableName, supportedTableTypes);
         if (tables.next()) {
             var columns = new ArrayList<ColumnInfo>();
             String catalog = tables.getString(1);
@@ -496,8 +498,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         try (var connection = getConnection(); var statement = getTaskInfoQuery(previous, taskRange, connection)) {
             var rs = statement.executeQuery();
             if (rs.next()) {
-                var max = tableInfo.hasIncColumn() ? rs.getLong("max") : 0;
-                var min = tableInfo.hasIncColumn() ? rs.getLong("min") : 0;
+                var max = tableInfo.hasIncColumn() ? rs.getLong("MAX") : 0;
+                var min = tableInfo.hasIncColumn() ? rs.getLong("MIN") : 0;
                 var endTime = tableInfo.hasTimeColumns() ? taskRange.getExclusiveEndTime() : null;
                 return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
                         new JDBCTaskMetadata(min, max + 1, previous.getEndTime(), endTime)));

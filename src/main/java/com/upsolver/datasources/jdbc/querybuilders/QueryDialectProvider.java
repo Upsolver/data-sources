@@ -12,6 +12,8 @@ public class QueryDialectProvider {
             return new RedshiftQueryDialect();
         } else if (connStr.startsWith("jdbc:postgresql")) {
             return new PostgreSqlQueryDialect();
+        } else if (connStr.startsWith("jdbc:snowflake")) {
+            return new SnowflakeQueryDialect();
         }
         return new DefaultQueryDialect();
 

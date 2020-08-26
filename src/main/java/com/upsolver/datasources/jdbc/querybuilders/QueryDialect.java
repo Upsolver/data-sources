@@ -14,9 +14,11 @@ import java.time.Instant;
 
 public interface QueryDialect {
 
-    long utcOffset(Connection connection) throws SQLException;
+    long utcOffsetSeconds(Connection connection) throws SQLException;
 
     boolean requiresUppercaseNames();
+
+    String toUpperCaseIfRequired(String s);
 
     boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
 

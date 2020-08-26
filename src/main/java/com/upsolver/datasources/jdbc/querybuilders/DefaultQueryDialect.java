@@ -30,10 +30,10 @@ public class DefaultQueryDialect implements QueryDialect {
     ));
 
     @Override
-    public long utcOffset(Connection connection) throws SQLException {
+    public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("SELECT TIMEDIFF(NOW(), UTC_TIMESTAMP)").executeQuery();
         rs.next();
-        return rs.getTime(1).getSeconds();
+        return rs.getTime(1).getTime() / 1000;
     }
 
 
@@ -41,11 +41,12 @@ public class DefaultQueryDialect implements QueryDialect {
     public NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,
                                                JDBCTaskMetadata metadata,
                                                Connection connection) throws SQLException {
-        String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
-                " MAX(" + tableInfo.getIncColumn() + ") AS max" +
+        String incColumn = tableInfo.getIncColumn();
+        String query = "SELECT MIN(" + incColumn + ") AS MIN," +
+                " MAX(" + incColumn + ") AS MAX" +
                 " FROM " + fullTableName(tableInfo) +
-                " WHERE " + tableInfo.getIncColumn() + " >= :startFrom" +
-                " HAVING MIN( " + tableInfo.getIncColumn() + ") IS NOT NULL";
+                " WHERE " + incColumn + " >= :startFrom" +
+                " HAVING MIN( " + incColumn + ") IS NOT NULL";
         var statement = new NamedPreparedStatment(connection, query);
         statement.setLong("startFrom", metadata.getExclusiveEnd());
         return statement;
@@ -74,14 +75,15 @@ public class DefaultQueryDialect implements QueryDialect {
                                                       Instant maxTime,
                                                       Connection connection) throws SQLException {
         String coalescedTimes = coalesceTimeColumns(tableInfo);
-        String query = "SELECT MIN(" + tableInfo.getIncColumn() + ") AS min," +
-                " MAX(" + tableInfo.getIncColumn() + ") AS max," +
+        String incColumn = tableInfo.getIncColumn();
+        String query = "SELECT MIN(" + incColumn + ") AS MIN," +
+                " MAX(" + incColumn + ") AS MAX," +
                 " MAX(" + coalescedTimes + ") AS last_time" +
                 " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalescedTimes + " < :maxTime" +
-                " AND ((" + coalescedTimes + " = :startTime AND " + tableInfo.getIncColumn() + " >= :startFrom)" +
+                " AND ((" + coalescedTimes + " = :startTime AND " + incColumn + " >= :startFrom)" +
                 " OR (" + coalescedTimes + " > :startTime))" +
-                " HAVING MIN( " + tableInfo.getIncColumn() + ") IS NOT NULL";
+                " HAVING MIN( " + incColumn + ") IS NOT NULL";
         var statement = new NamedPreparedStatment(connection, query);
         statement.setLong("startFrom", metadata.getExclusiveEnd());
         statement.setTime("startTime", metadata.getEndTime());
@@ -95,13 +97,14 @@ public class DefaultQueryDialect implements QueryDialect {
                                                    int limit,
                                                    Connection connection) throws SQLException {
         String coalesce = coalesceTimeColumns(tableInfo);
+        String incColumn = tableInfo.getIncColumn();
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + fullTableName(tableInfo) +
                 " WHERE " + coalesce + " < :endTime" +
-                " AND ((" + coalesce + " = :startTime AND " + tableInfo.getIncColumn() + " >= :incStart)" +
+                " AND ((" + coalesce + " = :startTime AND " + incColumn + " >= :incStart)" +
                 " OR (" + coalesce + " > :startTime))" +
                 rownumCondition(limit, true, false) +
-                " ORDER BY " + coalesce + ", " + tableInfo.getIncColumn() + " ASC" +
+                " ORDER BY " + coalesce + ", " + incColumn + " ASC" +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
         statement.setLong("incStart", metadata.getInclusiveStart());
@@ -135,9 +138,10 @@ public class DefaultQueryDialect implements QueryDialect {
                                             JDBCTaskMetadata metadata,
                                             int limit,
                                             Connection connection) throws SQLException {
+        String incColumn = tableInfo.getIncColumn();
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + fullTableName(tableInfo) +
-                " WHERE " + tableInfo.getIncColumn() + " BETWEEN :incStart AND :incEnd" +
+                " WHERE " + incColumn + " BETWEEN :incStart AND :incEnd" +
                 rownumCondition(limit, true, false) +
                 " " + endLimit(limit);
         var statement = new NamedPreparedStatment(connection, query);
@@ -186,6 +190,11 @@ public class DefaultQueryDialect implements QueryDialect {
     @Override
     public boolean requiresUppercaseNames() {
         return false;
+    }
+
+    @Override
+    public String toUpperCaseIfRequired(String s) {
+        return s != null && requiresUppercaseNames() ? s.toUpperCase() : s;
     }
 
     protected String endLimit(long amount) {
