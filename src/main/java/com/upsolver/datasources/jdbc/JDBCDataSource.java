@@ -18,6 +18,8 @@ import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialectProvider;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
+import com.upsolver.datasources.jdbc.utils.SQLDriver;
+import com.upsolver.datasources.jdbc.utils.SQLDrivers;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,13 +28,13 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.JDBCType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -45,6 +47,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+
+import static com.upsolver.datasources.jdbc.utils.MarkdownEscaper.escape;
+import static java.lang.String.format;
 
 public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBCTaskMetadata> {
 
@@ -62,6 +67,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String fullLoadIntervalProp = "Full Load Interval";
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
+    private static final SQLDrivers sqlDrivers = new SQLDrivers();
 
     private long readDelay;
     private long fullLoadIntervalMinutes;
@@ -303,10 +309,22 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     timestampCols,
                     fullLoad);
         } catch (SQLException e) {
-            return Collections.singletonList(new PropertyError(connectionStringProp, "Unable to connect to database, please ensure connection string and login info is correct.\n" +
-                    "SqlError: " + e.getMessage()));
+            Collection<SQLDriver> suitableDrivers = sqlDrivers.getDrivers().stream().filter(driver -> connectionString.startsWith(driver.getUrlPrefix())).collect(Collectors.toList());
+            final String errorMessage;
+            if (suitableDrivers.isEmpty()) {
+                logger.info("Unable to connect to database, using JDBC URL: {}", connectionString, e);
+                String msg = sqlDrivers.getDrivers().stream().map(driver -> format("%s (%s)", driver.getName(), driver.getUrlPrefix()))
+                        .collect(Collectors.joining("   \n"));
+                errorMessage = format("Unable to connect to database, the following databases are supported:   \n %s ", msg);
+            } else {
+                String urlTemplates = suitableDrivers.stream().map(SQLDriver::getUrlTemplate).collect(Collectors.joining(", "));
+                errorMessage = format("Unable to connect to database, please ensure connection string (%s) and login info is correct.  \n SqlError: %s.  \nConnection string should look like %s",
+                        connectionString,
+                        e.getMessage(),
+                        urlTemplates);
+            }
+            return Collections.singletonList(new PropertyError(connectionStringProp, escape(errorMessage)));
         }
-
     }
 
     private List<PropertyError> validateTableInfo(Connection connection,
