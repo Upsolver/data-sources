@@ -261,7 +261,7 @@ public class DefaultQueryDialect implements QueryDialect {
     }
 
     @Override
-    public String getStringValue(ResultSet rs, int index) throws SQLException {
-        return valueGetters.getOrDefault(rs.getMetaData().getColumnType(index), getString).apply(rs, index);
+    public ThrowingBiFunction<ResultSet, Integer, String, SQLException> getStringValueGetter(int sqlType) {
+        return valueGetters.getOrDefault(sqlType, getString);
     }
 }
