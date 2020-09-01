@@ -1,6 +1,7 @@
 package com.upsolver.datasources.jdbc;
 
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
+import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -9,15 +10,17 @@ import java.sql.Timestamp;
 class ResultSetValuesGetter implements AutoCloseable {
     private final TableInfo tableInfo;
     private final ResultSet underlying;
+    private final QueryDialect queryDialect;
 
     private String[] nextValues = null;
     private long nextIncValue;
     private Timestamp nextTimestampValue;
     private boolean onNextValues = false;
 
-    ResultSetValuesGetter(TableInfo tableInfo, ResultSet underlying) {
+    ResultSetValuesGetter(TableInfo tableInfo, ResultSet underlying, QueryDialect queryDialect) {
         this.tableInfo = tableInfo;
         this.underlying = underlying;
+        this.queryDialect = queryDialect;
     }
 
     public boolean next() throws SQLException {
@@ -74,7 +77,7 @@ class ResultSetValuesGetter implements AutoCloseable {
         } else {
             var result = new String[tableInfo.getColumnCount()];
             for (int i = 0; i < tableInfo.getColumnCount(); i++) {
-                result[i] = underlying.getString(i + 1); // Column indices start at 1 (☉_☉)
+                result[i] = queryDialect.getStringValue(underlying, i + 1); // Column indices start at 1 (☉_☉)
             }
             return result;
         }

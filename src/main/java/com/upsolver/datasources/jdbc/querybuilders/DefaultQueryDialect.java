@@ -4,6 +4,7 @@ import com.upsolver.datasources.jdbc.JDBCTaskMetadata;
 import com.upsolver.datasources.jdbc.metadata.SimpleSqlType;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
+import com.upsolver.datasources.jdbc.utils.ThrowingBiFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +18,9 @@ import java.sql.SQLType;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 
 public class DefaultQueryDialect implements QueryDialect {
     private static final Logger logger = LoggerFactory.getLogger(DefaultQueryDialect.class);
@@ -28,6 +31,17 @@ public class DefaultQueryDialect implements QueryDialect {
             JDBCType.TIME_WITH_TIMEZONE,
             JDBCType.TIMESTAMP_WITH_TIMEZONE
     ));
+
+    private static final ThrowingBiFunction<ResultSet, Integer, String, SQLException> getString = ResultSet::getString;
+    private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters;
+
+    public DefaultQueryDialect() {
+        this(Collections.emptyMap());
+    }
+
+    public DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters) {
+        this.valueGetters = valueGetters;
+    }
 
     @Override
     public long utcOffsetSeconds(Connection connection) throws SQLException {
@@ -244,5 +258,10 @@ public class DefaultQueryDialect implements QueryDialect {
     @Override
     public String getDriverClassName() {
         return null;
+    }
+
+    @Override
+    public String getStringValue(ResultSet rs, int index) throws SQLException {
+        return valueGetters.getOrDefault(rs.getMetaData().getColumnType(index), getString).apply(rs, index);
     }
 }

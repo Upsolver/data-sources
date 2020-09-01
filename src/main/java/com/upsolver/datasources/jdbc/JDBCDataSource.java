@@ -232,7 +232,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         Connection connection = getConnection();
         var result = queryData(sampleMetadata, 100, connection);
         var rowReader =
-                new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result), sampleMetadata, connection, true);
+                new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result, queryDialect), sampleMetadata, connection, true);
         var inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
@@ -462,7 +462,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
         // Value getter + Some of the code in RowReader are needed only because we insist on running a single query
         // and using a single result set for all ranges. If we allow query per window a lot of the code can be simplified.
-        var valueGetter = new ResultSetValuesGetter(tableInfo, resultSet);
+        var valueGetter = new ResultSetValuesGetter(tableInfo, resultSet, queryDialect);
 
         for (int i = 0; i < wantedRanges.size(); i++) {
             final var isLast = i == wantedRanges.size() - 1;
