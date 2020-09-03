@@ -3,9 +3,9 @@ package com.upsolver.datasources.jdbc.querybuilders;
 import com.upsolver.datasources.jdbc.JDBCTaskMetadata;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.utils.NamedPreparedStatment;
+import com.upsolver.datasources.jdbc.utils.ThrowingBiFunction;
 
 import java.sql.Connection;
-import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -70,4 +70,5 @@ public interface QueryDialect {
 
     String getDriverClassName();
 
+    ThrowingBiFunction<ResultSet, Integer, String, SQLException> getStringValueGetter(int sqlType);
 }

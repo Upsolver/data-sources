@@ -1,15 +1,20 @@
 package com.upsolver.datasources.jdbc.querybuilders;
 
+import com.upsolver.datasources.jdbc.utils.ThrowingBiFunction;
 import oracle.jdbc.OracleType;
 
+import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.JDBCType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLType;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 
 public class OracleQueryDialect extends DefaultQueryDialect {
@@ -18,6 +23,13 @@ public class OracleQueryDialect extends DefaultQueryDialect {
             OracleType.TIMESTAMP_WITH_TIME_ZONE,
             OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
     ));
+
+    private static final ThrowingBiFunction<ResultSet, Integer, String, SQLException> blobAsString = (rs, i) -> Optional.ofNullable(rs.getBytes(i)).map(bytes -> new BigInteger(1, bytes).toString(16)).orElse(null);
+    private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> blobValueGetters = Collections.singletonMap(Types.BLOB, blobAsString);
+
+    public OracleQueryDialect() {
+        super(blobValueGetters);
+    }
 
     @Override
     public long utcOffsetSeconds(Connection connection) throws SQLException {
