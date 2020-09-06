@@ -13,6 +13,7 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -24,11 +25,22 @@ public class OracleQueryDialect extends DefaultQueryDialect {
             OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
     ));
 
-    private static final ThrowingBiFunction<ResultSet, Integer, String, SQLException> blobAsString = (rs, i) -> Optional.ofNullable(rs.getBytes(i)).map(bytes -> new BigInteger(1, bytes).toString(16)).orElse(null);
-    private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> blobValueGetters = Collections.singletonMap(Types.BLOB, blobAsString);
+    private static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> blobAsString = (rs, i) -> Optional.ofNullable(rs.getBytes(i)).map(bytes -> new BigInteger(1, bytes).toString(16)).orElse(null);
+    private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> getters = new HashMap<>();
+    static {
+        getters.put(Types.DATE, getDate);
+        getters.put(Types.TIME, getTime);
+        getters.put(Types.TIMESTAMP, getTimestamp);
+        getters.put(OracleType.TIMESTAMP.getVendorTypeNumber(), getTimestamp);
+        getters.put(Types.TIME_WITH_TIMEZONE, getTime);
+        getters.put(Types.TIMESTAMP_WITH_TIMEZONE, getTimestamp);
+        getters.put(OracleType.TIMESTAMP_WITH_TIME_ZONE.getVendorTypeNumber(), getTimestamp);
+        getters.put(OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE.getVendorTypeNumber(), getTimestamp);
+        getters.put(Types.BLOB, blobAsString);
+    }
 
-    public OracleQueryDialect() {
-        super(blobValueGetters);
+    public OracleQueryDialect(boolean keepType) {
+        super(keepType ? getters : Collections.emptyMap(), keepType ? getObject : getString);
     }
 
     @Override

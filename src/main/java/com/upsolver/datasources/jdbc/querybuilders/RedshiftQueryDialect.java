@@ -6,6 +6,10 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class RedshiftQueryDialect extends DefaultQueryDialect {
+    public RedshiftQueryDialect(boolean keepType) {
+        super(keepType);
+    }
+
     public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("select current_setting('TIMEZONE')").executeQuery();
         rs.next();

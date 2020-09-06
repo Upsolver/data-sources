@@ -28,15 +28,17 @@ repositories {
 dependencies {
     compile 'com.zaxxer:HikariCP:3.4.2'
     implementation 'org.slf4j:slf4j-api:1.7.30'
+    implementation group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '2.11.2'
     testCompile group: 'junit', name: 'junit', version: '4.12'
-    implementation 'com.upsolver:data-sources-interfaces:1.0.6'
+    implementation 'com.upsolver:data-sources-interfaces:1.0.7'
 
-    compileOnly group: 'com.amazon.redshift', name: 'redshift-jdbc42', version: '1.2.1.1001'
-    compileOnly "mysql:mysql-connector-java:8.0.14"
-    compileOnly "com.oracle.ojdbc:ojdbc8:19.3.0.0"
-    compileOnly "net.snowflake:snowflake-jdbc:3.12.2"
-    compileOnly "org.postgresql:postgresql:42.2.9"
-    compileOnly "com.microsoft.sqlserver:mssql-jdbc:8.2.0.jre11"
 
-//    implementation fileTree(dir: '/tmp/p/com/upsolver/data-sources-interfaces/1.0.1/', include: '*.jar')
+    implementation group: 'com.amazon.redshift', name: 'redshift-jdbc42', version: '1.2.1.1001'
+    implementation "mysql:mysql-connector-java:8.0.14"
+    implementation "com.oracle.ojdbc:ojdbc8:19.3.0.0"
+    implementation "net.snowflake:snowflake-jdbc:3.12.2"
+    implementation "org.postgresql:postgresql:42.2.9"
+    implementation "com.microsoft.sqlserver:mssql-jdbc:8.2.0.jre11"
+
+//    implementation fileTree(dir: '/tmp/p/com/upsolver/data-sources-interfaces/1.0.8-SNAPSHOT/', include: '*.jar')
 }

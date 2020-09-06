@@ -15,10 +15,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLType;
+import java.sql.Types;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 
@@ -32,15 +34,31 @@ public class DefaultQueryDialect implements QueryDialect {
             JDBCType.TIMESTAMP_WITH_TIMEZONE
     ));
 
-    private static final ThrowingBiFunction<ResultSet, Integer, String, SQLException> getString = ResultSet::getString;
-    private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters;
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getObject = ResultSet::getObject;
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getString = ResultSet::getString;
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getDate = (rs, i) -> rs.getDate(i).getTime();
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTime = (rs, i) -> rs.getTime(i).getTime();
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTimestamp = (rs, i) -> rs.getTimestamp(i).getTime();
 
-    public DefaultQueryDialect() {
-        this(Collections.emptyMap());
+    protected static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> dateTimeGetters = new HashMap<>();
+    static {
+        dateTimeGetters.put(Types.DATE, getDate);
+        dateTimeGetters.put(Types.TIME, getTime);
+        dateTimeGetters.put(Types.TIMESTAMP, getTimestamp);
+        dateTimeGetters.put(Types.TIME_WITH_TIMEZONE, getTime);
+        dateTimeGetters.put(Types.TIMESTAMP_WITH_TIMEZONE, getTimestamp);
     }
 
-    public DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters) {
+    private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
+    private final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter;
+
+    public DefaultQueryDialect(boolean keepType) {
+        this(keepType ? dateTimeGetters : Collections.emptyMap(), keepType ? getObject : getString);
+    }
+
+    protected DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters, ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter) {
         this.valueGetters = valueGetters;
+        this.defaultValueGetter = defaultValueGetter;
     }
 
     @Override
@@ -261,7 +279,7 @@ public class DefaultQueryDialect implements QueryDialect {
     }
 
     @Override
-    public ThrowingBiFunction<ResultSet, Integer, String, SQLException> getStringValueGetter(int sqlType) {
-        return valueGetters.getOrDefault(sqlType, getString);
+    public ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getValueGetter(int sqlType) {
+        return valueGetters.getOrDefault(sqlType, defaultValueGetter);
     }
 }

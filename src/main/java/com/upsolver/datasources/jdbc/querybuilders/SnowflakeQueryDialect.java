@@ -5,6 +5,10 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class SnowflakeQueryDialect extends DefaultQueryDialect {
+    public SnowflakeQueryDialect(boolean keepType) {
+        super(keepType);
+    }
+
     public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("show parameters like 'TIMEZONE'").executeQuery();
         rs.next();

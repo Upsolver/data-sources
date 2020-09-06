@@ -59,7 +59,7 @@ public class RowReader implements AutoCloseable {
         return result;
     }
 
-    public String[] getValues() throws SQLException {
+    public Object[] getValues() throws SQLException {
         return valuesGetter.getValues();
     }
 
