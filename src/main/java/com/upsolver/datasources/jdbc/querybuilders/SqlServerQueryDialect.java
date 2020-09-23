@@ -57,4 +57,9 @@ public class SqlServerQueryDialect extends DefaultQueryDialect {
             throw new IllegalStateException(e);
         }
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:sqlserver:");
+    }
 }

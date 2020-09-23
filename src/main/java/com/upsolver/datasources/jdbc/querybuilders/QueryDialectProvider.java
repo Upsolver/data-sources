@@ -1,21 +1,15 @@
 package com.upsolver.datasources.jdbc.querybuilders;
 
-public class QueryDialectProvider {
+import java.util.ServiceLoader;
+import java.util.stream.StreamSupport;
 
+public class QueryDialectProvider {
     public static QueryDialect forConnection(String connectionString) {
         String connStr = connectionString.toLowerCase();
-        if (connStr.startsWith("jdbc:sqlserver")) {
-            return new SqlServerQueryDialect();
-        } else if (connStr.startsWith("jdbc:oracle")) {
-            return new OracleQueryDialect();
-        } else if (connStr.startsWith("jdbc:redshift")) {
-            return new RedshiftQueryDialect();
-        } else if (connStr.startsWith("jdbc:postgresql")) {
-            return new PostgreSqlQueryDialect();
-        } else if (connStr.startsWith("jdbc:snowflake")) {
-            return new SnowflakeQueryDialect();
-        }
-        return new DefaultQueryDialect();
-
+        Iterable<QueryDialect> iterable = () -> ServiceLoader.load(QueryDialect.class).iterator();
+        return StreamSupport.stream(iterable.spliterator(), false)
+                .filter(d -> d.acceptsURL(connStr))
+                .findFirst()
+                .orElseGet(DefaultQueryDialect::new);
     }
 }

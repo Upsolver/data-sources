@@ -31,12 +31,12 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     implementation 'com.upsolver:data-sources-interfaces:1.0.6'
 
-    compileOnly group: 'com.amazon.redshift', name: 'redshift-jdbc42', version: '1.2.1.1001'
-    compileOnly "mysql:mysql-connector-java:8.0.14"
-    compileOnly "com.oracle.ojdbc:ojdbc8:19.3.0.0"
-    compileOnly "net.snowflake:snowflake-jdbc:3.12.2"
-    compileOnly "org.postgresql:postgresql:42.2.9"
-    compileOnly "com.microsoft.sqlserver:mssql-jdbc:8.2.0.jre11"
+    implementation group: 'com.amazon.redshift', name: 'redshift-jdbc42', version: '1.2.1.1001'
+    implementation "mysql:mysql-connector-java:8.0.14"
+    implementation "com.oracle.ojdbc:ojdbc8:19.3.0.0"
+    implementation "net.snowflake:snowflake-jdbc:3.12.2"
+    implementation "org.postgresql:postgresql:42.2.9"
+    implementation "com.microsoft.sqlserver:mssql-jdbc:8.2.0.jre11"
 
 //    implementation fileTree(dir: '/tmp/p/com/upsolver/data-sources-interfaces/1.0.1/', include: '*.jar')
 }
