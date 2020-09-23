@@ -19,4 +19,9 @@ public class SnowflakeQueryDialect extends DefaultQueryDialect {
     public boolean requiresUppercaseNames() {
         return true;
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:snowflake:");
+    }
 }

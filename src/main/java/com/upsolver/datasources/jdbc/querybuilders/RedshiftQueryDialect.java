@@ -22,4 +22,9 @@ public class RedshiftQueryDialect extends DefaultQueryDialect {
         // Example default value: "identity"(707455, 0, '1,1'::text)
         return def != null && def.startsWith("\"identity\"(");
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:redshift:");
+    }
 }

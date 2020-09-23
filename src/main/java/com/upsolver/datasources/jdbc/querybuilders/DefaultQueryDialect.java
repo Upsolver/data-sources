@@ -282,4 +282,9 @@ public class DefaultQueryDialect implements QueryDialect {
     public ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getValueGetter(int sqlType) {
         return valueGetters.getOrDefault(sqlType, defaultValueGetter);
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:");
+    }
 }

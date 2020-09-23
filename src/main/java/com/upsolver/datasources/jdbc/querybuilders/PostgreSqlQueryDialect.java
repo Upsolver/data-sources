@@ -27,4 +27,9 @@ public class PostgreSqlQueryDialect extends DefaultQueryDialect {
     public String getDriverClassName() {
         return "org.postgresql.Driver";
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:postgresql:");
+    }
 }

@@ -1,0 +1,6 @@
+com.upsolver.datasources.jdbc.querybuilders.SqlServerQueryDialect
+com.upsolver.datasources.jdbc.querybuilders.OracleQueryDialect
+com.upsolver.datasources.jdbc.querybuilders.RedshiftQueryDialect
+com.upsolver.datasources.jdbc.querybuilders.PostgreSqlQueryDialect
+com.upsolver.datasources.jdbc.querybuilders.SnowflakeQueryDialect
+com.upsolver.datasources.jdbc.querybuilders.DefaultQueryDialect

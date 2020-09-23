@@ -108,4 +108,9 @@ public class OracleQueryDialect extends DefaultQueryDialect {
         }
         return sqlType;
     }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:oracle:");
+    }
 }
