@@ -16,9 +16,7 @@ public interface QueryDialect {
 
     long utcOffsetSeconds(Connection connection) throws SQLException;
 
-    boolean requiresUppercaseNames();
-
-    String toUpperCaseIfRequired(String s);
+    String normalizeIdentifier(String s);
 
     boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
 

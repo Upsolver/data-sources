@@ -3,9 +3,14 @@ package com.upsolver.datasources.jdbc.querybuilders;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.TimeZone;
 
 public class RedshiftQueryDialect extends DefaultQueryDialect {
+    public RedshiftQueryDialect() {
+        super(Collections.emptyMap(), IdentifierNormalizer.TO_LOWER_CASE);
+    }
+
     public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("select current_setting('TIMEZONE')").executeQuery();
         rs.next();

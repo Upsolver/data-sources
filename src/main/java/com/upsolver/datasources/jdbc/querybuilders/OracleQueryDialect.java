@@ -28,7 +28,7 @@ public class OracleQueryDialect extends DefaultQueryDialect {
     private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> blobValueGetters = Collections.singletonMap(Types.BLOB, blobAsString);
 
     public OracleQueryDialect() {
-        super(blobValueGetters);
+        super(blobValueGetters, IdentifierNormalizer.TO_UPPER_CASE);
     }
 
     @Override
@@ -49,11 +49,6 @@ public class OracleQueryDialect extends DefaultQueryDialect {
         } else {
             return "";
         }
-    }
-
-    @Override
-    public boolean requiresUppercaseNames() {
-        return true;
     }
 
     @Override
