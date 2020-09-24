@@ -130,20 +130,20 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             tableInfo = loadTableInfo(metadata, properties.getOrDefault(schemaPatternProp, null), properties.get(tableNameProp));
             var allTimeColumns = new HashSet<String>();
             if (userProvidedIncColumn != null) {
-                tableInfo.setIncColumn(queryDialect.toUpperCaseIfRequired(userProvidedIncColumn));
+                tableInfo.setIncColumn(queryDialect.normalizeIdentifier(userProvidedIncColumn));
             }
             for (ColumnInfo column : tableInfo.getColumns()) {
                 if (column.isTimeType()) {
                     allTimeColumns.add(column.getName().toUpperCase());
                 } else if (tableInfo.getIncColumn() == null && column.isIncCol()) {
-                    tableInfo.setIncColumn(queryDialect.toUpperCaseIfRequired(column.getName()));
+                    tableInfo.setIncColumn(queryDialect.normalizeIdentifier(column.getName()));
                 }
             }
             String[] filteredTimestampColumns =
                     Arrays.stream(properties.getOrDefault(timestampColumnsProp, "").split(","))
                             .map(String::trim)
                             .filter(x -> allTimeColumns.contains(x.toUpperCase()))
-                            .map(f -> queryDialect.toUpperCaseIfRequired(f))
+                            .map(f -> queryDialect.normalizeIdentifier(f))
                             .toArray(String[]::new);
             if (filteredTimestampColumns.length != 0) {
                 tableInfo.setTimeColumns(filteredTimestampColumns);
@@ -179,8 +179,8 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     }
 
     private TableInfo loadTableInfo(DatabaseMetaData metadata, String schemaPattern, String tableName) throws SQLException {
-        var fixedTableName = queryDialect.toUpperCaseIfRequired(tableName);
-        var fixedSchemaPattern = queryDialect.toUpperCaseIfRequired(schemaPattern);
+        var fixedTableName = queryDialect.normalizeIdentifier(tableName);
+        var fixedSchemaPattern = queryDialect.normalizeIdentifier(schemaPattern);
         var supportedTableTypes = getSupportedTableTypes(metadata);
         var tables = metadata.getTables(null, fixedSchemaPattern, fixedTableName, supportedTableTypes);
         if (tables.next()) {

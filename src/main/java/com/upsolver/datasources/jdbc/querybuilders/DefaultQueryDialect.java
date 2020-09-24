@@ -34,13 +34,15 @@ public class DefaultQueryDialect implements QueryDialect {
 
     private static final ThrowingBiFunction<ResultSet, Integer, String, SQLException> getString = ResultSet::getString;
     private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters;
+    private final IdentifierNormalizer identifierNormalizer;
 
     public DefaultQueryDialect() {
-        this(Collections.emptyMap());
+        this(Collections.emptyMap(), IdentifierNormalizer.CASE_INSENSITIVE);
     }
 
-    public DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters) {
+    public DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters, IdentifierNormalizer identifierNormalizer) {
         this.valueGetters = valueGetters;
+        this.identifierNormalizer = identifierNormalizer;
     }
 
     @Override
@@ -202,13 +204,8 @@ public class DefaultQueryDialect implements QueryDialect {
     }
 
     @Override
-    public boolean requiresUppercaseNames() {
-        return false;
-    }
-
-    @Override
-    public String toUpperCaseIfRequired(String s) {
-        return s != null && requiresUppercaseNames() ? s.toUpperCase() : s;
+    public String normalizeIdentifier(String s) {
+        return identifierNormalizer.normalize(s);
     }
 
     protected String endLimit(long amount) {
