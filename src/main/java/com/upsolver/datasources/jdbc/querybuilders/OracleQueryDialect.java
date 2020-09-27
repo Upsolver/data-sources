@@ -33,6 +33,18 @@ public class OracleQueryDialect extends DefaultQueryDialect {
 
     @Override
     public long utcOffsetSeconds(Connection connection) throws SQLException {
+        var rs1 = connection.createStatement().executeQuery("select SYSTIMESTAMP from DUAL");
+        rs1.next();
+        var systimestamp = rs1.getObject(1);
+
+        var rs2 = connection.createStatement().executeQuery("select sys_extract_utc(systimestamp) from DUAL");
+        rs2.next();
+        var systimestampUtc = rs2.getObject(1);
+
+        var rs3 = connection.createStatement().executeQuery("SELECT SYSTIMESTAMP - sys_extract_utc(systimestamp) FROM DUAL");
+        rs3.next();
+        var intervalObj = rs3.getObject(1);
+
         var rs =
                 connection.prepareStatement("SELECT extract(day from (SYSTIMESTAMP - sys_extract_utc(systimestamp)) * 24 * 60 * 60) FROM DUAL")
                         .executeQuery();

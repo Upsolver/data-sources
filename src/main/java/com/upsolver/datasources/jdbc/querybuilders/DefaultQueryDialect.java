@@ -27,8 +27,6 @@ public class DefaultQueryDialect implements QueryDialect {
     private static final Collection<SQLType> timeTypes = new HashSet<>(Arrays.asList(
             JDBCType.DATE,
             JDBCType.TIMESTAMP,
-            JDBCType.TIME,
-            JDBCType.TIME_WITH_TIMEZONE,
             JDBCType.TIMESTAMP_WITH_TIMEZONE
     ));
 

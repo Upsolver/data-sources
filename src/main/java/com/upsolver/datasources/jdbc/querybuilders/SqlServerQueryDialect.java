@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 public class SqlServerQueryDialect extends DefaultQueryDialect {
     private static final Map<Integer, SQLType> sqlServerTypes = Arrays.stream(Types.class.getFields())
             .map(f -> new SimpleSqlType(f.getName(), "microsoft", getIntValue(f))).collect(Collectors.toMap(SimpleSqlType::getVendorTypeNumber, t -> t));
-    private static final Collection<Integer> sqlServerTimeTypeCodes = new HashSet<>(Arrays.asList(Types.DATETIMEOFFSET, Types.DATETIME, Types.SMALLDATETIME));
+    private static final Collection<Integer> sqlServerTimeTypeCodes = new HashSet<>(Arrays.asList(Types.DATETIME, Types.SMALLDATETIME));
     private static final Collection<SQLType> sqlServerTimeTypes = sqlServerTypes.values().stream()
             .filter(f -> sqlServerTimeTypeCodes.contains(f.getVendorTypeNumber())).collect(Collectors.toSet());
 
