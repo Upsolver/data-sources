@@ -41,6 +41,7 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     testCompile group: 'org.mockito', name: 'mockito-all', version: '1.10.19'
     testCompile group: 'org.reflections', name: 'reflections', version: '0.9.12'
+    testImplementation group: 'com.h2database', name: 'h2', version: '1.4.200'
 
     testCompile "org.testcontainers:testcontainers:1.14.3"
     testCompile 'org.testcontainers:mysql:1.14.3'

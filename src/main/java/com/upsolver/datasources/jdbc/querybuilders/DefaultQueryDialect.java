@@ -72,7 +72,7 @@ public class DefaultQueryDialect implements QueryDialect {
         String coalescedTimes = coalesceTimeColumns(tableInfo);
         String query = "SELECT MAX(" + coalescedTimes + ") AS last_time" +
                 " FROM " + fullTableName(tableInfo) +
-                " WHERE " + coalescedTimes + " < :maxTime" +
+                " WHERE " + coalescedTimes + " <= :maxTime" +
                 " AND " + coalescedTimes + " > :startTime" +
                 " HAVING MAX( " + coalescedTimes + ") IS NOT NULL";
         var statement = new NamedPreparedStatment(connection, query);
@@ -134,7 +134,7 @@ public class DefaultQueryDialect implements QueryDialect {
         String coalesce = coalesceTimeColumns(tableInfo);
         String query = "SELECT " + topLimit(limit) + " *" +
                 " FROM " + fullTableName(tableInfo) +
-                " WHERE " + coalesce + " > :startTime AND " + coalesce + " <= :endTime" +
+                " WHERE " + coalesce + " >= :startTime AND " + coalesce + " < :endTime" +
                 rownumCondition(limit, true, false) +
                 " ORDER BY " + coalesce + " ASC" +
                 " " + endLimit(limit);

@@ -19,7 +19,7 @@ public class SQLDriversTest {
     @Test
     public void getDrivers() {
         Collection<SQLDriver> drivers = new SQLDrivers().getDrivers();
-        Set<String> expectedDriverNames = new HashSet<>(Arrays.asList("MySQL Driver,Amazon Redshift,Microsoft MSSQL Server JDBC Driver,Snowflake Database,Oracle DB,PostgreSQL".split("\\s*,\\s*")));
+        Set<String> expectedDriverNames = new HashSet<>(Arrays.asList("MySQL Driver,Amazon Redshift,Microsoft MSSQL Server JDBC Driver,Snowflake Database,Oracle DB,PostgreSQL,H2".split("\\s*,\\s*")));
         Set<String> actualDriverNames = drivers.stream().map(SQLDriver::getName).collect(Collectors.toSet());
         assertEquals(expectedDriverNames, actualDriverNames);
     }

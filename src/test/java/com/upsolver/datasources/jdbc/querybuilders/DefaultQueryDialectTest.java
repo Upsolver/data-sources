@@ -50,7 +50,7 @@ public class DefaultQueryDialectTest {
         Instant startTime = now.minus(1, ChronoUnit.HOURS);
         Instant endTime = now.minus(1, ChronoUnit.HOURS);
         JDBCTaskMetadata md = new JDBCTaskMetadata(0, 0, startTime, endTime);
-        TableInfo tableInfo = createTableInfo(conn, ps, "SELECT MAX(ts) AS last_time FROM schema.table WHERE ts < ? AND ts > ? HAVING MAX( ts) IS NOT NULL");
+        TableInfo tableInfo = createTableInfo(conn, ps, "SELECT MAX(ts) AS last_time FROM schema.table WHERE ts <= ? AND ts > ? HAVING MAX( ts) IS NOT NULL");
         NamedPreparedStatment nps = new DefaultQueryDialect().taskInfoByTime(tableInfo, md, now, conn);
         assertNotNull(nps);
 
@@ -103,7 +103,7 @@ public class DefaultQueryDialectTest {
         int start = 432;
         int limit = 678;
         JDBCTaskMetadata md = new JDBCTaskMetadata(start, limit, startTime, endTime);
-        TableInfo tableInfo = createTableInfo(conn, ps, "SELECT  * FROM schema.table WHERE ts > ? AND ts <= ? ORDER BY ts ASC limit " + limit);
+        TableInfo tableInfo = createTableInfo(conn, ps, "SELECT  * FROM schema.table WHERE ts >= ? AND ts < ? ORDER BY ts ASC limit " + limit);
         NamedPreparedStatment nps = new DefaultQueryDialect().queryByTime(tableInfo, md, limit, conn);
         assertNotNull(nps);
 
