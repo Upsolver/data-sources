@@ -56,18 +56,18 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-
-    private static final String connectionStringProp = "Connection String";
-    private static final String connectionPropertiesProp = "Connection Properties";
-    private static final String schemaPatternProp = "Schema Pattern";
-    private static final String tableNameProp = "Table Name";
-    private static final String incrementingColumnNameProp = "Incrementing Column";
-    private static final String timestampColumnsProp = "Timestamp Columns";
-    private static final String readDelayProp = "Read Delay";
-    private static final String fullLoadIntervalProp = "Full Load Interval";
-    private static final String userNameProp = "User Name";
-    private static final String passwordProp = "Password";
-    private static final SQLDrivers sqlDrivers = new SQLDrivers();
+    // constants are visible for testing
+    static final String connectionStringProp = "Connection String";
+    static final String connectionPropertiesProp = "Connection Properties";
+    static final String schemaPatternProp = "Schema Pattern";
+    static final String tableNameProp = "Table Name";
+    static final String incrementingColumnNameProp = "Incrementing Column";
+    static final String timestampColumnsProp = "Timestamp Columns";
+    static final String readDelayProp = "Read Delay";
+    static final String fullLoadIntervalProp = "Full Load Interval";
+    static final String userNameProp = "User Name";
+    static final String passwordProp = "Password";
+    static final SQLDrivers sqlDrivers = new SQLDrivers();
 
     private long readDelay;
     private long fullLoadIntervalMinutes;
@@ -281,6 +281,19 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     @Override
     public List<PropertyError> validate(Map<String, String> properties) {
         var connectionString = properties.get(connectionStringProp);
+        if (connectionString == null || "".equals(connectionString)) {
+            return Collections.singletonList(new PropertyError(connectionStringProp, "Connection string is missing"));
+        }
+
+        List<PropertyError> missingMandatoryProperties = getPropertyDescriptions().stream()
+                .filter(pd -> !pd.isOptional())
+                .filter(pd -> properties.get(pd.getName()) == null)
+                .map(pd -> new PropertyError(pd.getName(), format("Mandatory property %s is absent", pd.getName())))
+                .collect(Collectors.toList());
+        if (!missingMandatoryProperties.isEmpty()) {
+            return missingMandatoryProperties;
+        }
+
         var connectionProperties = properties.getOrDefault(connectionPropertiesProp, "");
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
