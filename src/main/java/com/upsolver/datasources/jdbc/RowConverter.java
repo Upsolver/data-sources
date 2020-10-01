@@ -8,5 +8,5 @@ interface RowConverter {
 
     void writeHeader(OutputStream os) throws IOException;
 
-    void convertRow(String[] values, OutputStream os) throws IOException;
+    void convertRow(Object[] values, OutputStream os) throws IOException;
 }

@@ -70,5 +70,5 @@ public interface QueryDialect {
 
     String getDriverClassName();
 
-    ThrowingBiFunction<ResultSet, Integer, String, SQLException> getStringValueGetter(int sqlType);
+    ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getValueGetter(int sqlType);
 }

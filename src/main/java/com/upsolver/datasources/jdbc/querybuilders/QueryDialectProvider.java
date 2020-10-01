@@ -2,20 +2,19 @@ package com.upsolver.datasources.jdbc.querybuilders;
 
 public class QueryDialectProvider {
 
-    public static QueryDialect forConnection(String connectionString) {
+    public static QueryDialect forConnection(String connectionString, boolean keepTypes) {
         String connStr = connectionString.toLowerCase();
         if (connStr.startsWith("jdbc:sqlserver")) {
-            return new SqlServerQueryDialect();
+            return new SqlServerQueryDialect(keepTypes);
         } else if (connStr.startsWith("jdbc:oracle")) {
-            return new OracleQueryDialect();
+            return new OracleQueryDialect(keepTypes);
         } else if (connStr.startsWith("jdbc:redshift")) {
-            return new RedshiftQueryDialect();
+            return new RedshiftQueryDialect(keepTypes);
         } else if (connStr.startsWith("jdbc:postgresql")) {
-            return new PostgreSqlQueryDialect();
+            return new PostgreSqlQueryDialect(keepTypes);
         } else if (connStr.startsWith("jdbc:snowflake")) {
-            return new SnowflakeQueryDialect();
+            return new SnowflakeQueryDialect(keepTypes);
         }
-        return new DefaultQueryDialect();
-
+        return new DefaultQueryDialect(keepTypes);
     }
 }

@@ -30,7 +30,7 @@ public class ResultSetInputStream extends InputStream {
                     rowConverter.writeHeader(byteArrayOutputStream);
                     wroteHeader = true;
                 }
-                String[] values = rowReader.getValues();
+                Object[] values = rowReader.getValues();
                 rowConverter.convertRow(values, byteArrayOutputStream);
                 byteArrayOutputStream.close();
                 position = 0;
@@ -69,6 +69,17 @@ public class ResultSetInputStream extends InputStream {
         }
     }
 
+    @Override
+    public int available() throws IOException {
+        try {
+            if (ensureBuffer()) {
+                return buffer.length - position;
+            }
+            return 0;
+        } catch (SQLException e) {
+            throw new IOException(e);
+        }
+    }
 
     @Override
     public void close() throws IOException {

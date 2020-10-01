@@ -22,6 +22,10 @@ public class SqlServerQueryDialect extends DefaultQueryDialect {
     private static final Collection<SQLType> sqlServerTimeTypes = sqlServerTypes.values().stream()
             .filter(f -> sqlServerTimeTypeCodes.contains(f.getVendorTypeNumber())).collect(Collectors.toSet());
 
+    public SqlServerQueryDialect(boolean keepType) {
+        super(keepType);
+    }
+
     @Override
     public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("SELECT DATEDIFF(second, GETDATE(), GETUTCDATE());").executeQuery();

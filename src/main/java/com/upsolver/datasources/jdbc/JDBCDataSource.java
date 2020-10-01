@@ -13,6 +13,7 @@ import com.upsolver.common.datasources.SimplePropertyDescription;
 import com.upsolver.common.datasources.TaskInformation;
 import com.upsolver.common.datasources.TaskRange;
 import com.upsolver.common.datasources.contenttypes.CSVContentType;
+import com.upsolver.common.datasources.contenttypes.JsonDataSourceContentType;
 import com.upsolver.datasources.jdbc.metadata.ColumnInfo;
 import com.upsolver.datasources.jdbc.metadata.TableInfo;
 import com.upsolver.datasources.jdbc.querybuilders.QueryDialect;
@@ -42,6 +43,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -67,7 +69,21 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private static final String fullLoadIntervalProp = "Full Load Interval";
     private static final String userNameProp = "User Name";
     private static final String passwordProp = "Password";
+    private static final String keepSourceTypes = "Keep JDBC source types";
     private static final SQLDrivers sqlDrivers = new SQLDrivers();
+    private static final List<PropertyDescription> propertyDescriptions =
+            Arrays.asList(
+                    new SimplePropertyDescription(connectionStringProp, "The connection string that will be used to connect to the database", false),
+                    new SimplePropertyDescription(connectionPropertiesProp, "Extra connection properties that will be used to connect to the database", true, false, new String[0], null, PropertyEditor.TEXT_AREA),
+                    new SimplePropertyDescription(userNameProp, "The user name to connect with", false),
+                    new SimplePropertyDescription(passwordProp, "The password to connect with", false, true),
+                    new SimplePropertyDescription(schemaPatternProp, "A schema name pattern; must match the schema name as it is stored in the database; \"\" retrieves those without a schema; empty means that the schema name should not be used to narrow the search for the table", true),
+                    new SimplePropertyDescription(tableNameProp, "The name of the table to read from", false),
+                    new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", true),
+                    new SimplePropertyDescription(timestampColumnsProp, "Comma separated list of timestamp columns to use for loading new rows. The fist non-null value will be used. At least one of the values must not be null for each row", true),
+                    new SimplePropertyDescription(readDelayProp, "How long (in seconds) to wait before reading rows based on their timestamp. This allows waiting for all transactions of a certain timestamp to complete to avoid loading partial data. Default value is 0", true),
+                    new SimplePropertyDescription(fullLoadIntervalProp, "If set the full table will be read every configured interval (in minutes). When this is configured the update time and incrementing columns are not used.", true),
+                    new SimplePropertyDescription(keepSourceTypes, "Keep original data types from source to use string representation", true, false, null, null, null, true, Optional.of("true")));
 
     private long readDelay;
     private long fullLoadIntervalMinutes;
@@ -75,6 +91,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private QueryDialect queryDialect;
     private long dbTimezoneOffset;
     private long overallQueryTimeAdjustment;
+    private boolean keepTypes = false;
+    private DataSourceContentType contentType;
+    private RowConverter rowConverter;
 
 
     private final int connectionIdleTimeout = 90 * 1000;
@@ -115,8 +134,10 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         ds.setJdbcUrl(connectionString);
         ds.setUsername(properties.get(userNameProp));
         ds.setPassword(properties.get(passwordProp));
+        keepTypes = Optional.ofNullable(properties.get(keepSourceTypes)).map(Boolean::parseBoolean).orElse(false);
+        contentType = keepTypes ? new JsonDataSourceContentType() : new CSVContentType(true, ',', null, null);
 
-        queryDialect = QueryDialectProvider.forConnection(connectionString);
+        queryDialect = QueryDialectProvider.forConnection(connectionString, keepTypes);
         String driverClassName = queryDialect.getDriverClassName();
         if (driverClassName != null) {
             ds.setDriverClassName(driverClassName);
@@ -128,6 +149,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             DatabaseMetaData metadata = con.getMetaData();
             String userProvidedIncColumn = properties.get(incrementingColumnNameProp);
             tableInfo = loadTableInfo(metadata, properties.getOrDefault(schemaPatternProp, null), properties.get(tableNameProp));
+            rowConverter = keepTypes ? new JsonRowConverter(tableInfo) : new CsvRowConverter(tableInfo);
             var allTimeColumns = new HashSet<String>();
             if (userProvidedIncColumn != null) {
                 tableInfo.setIncColumn(queryDialect.toUpperCaseIfRequired(userProvidedIncColumn));
@@ -206,23 +228,12 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
     @Override
     public List<PropertyDescription> getPropertyDescriptions() {
-        ArrayList<PropertyDescription> result = new ArrayList<>();
-        result.add(new SimplePropertyDescription(connectionStringProp, "The connection string that will be used to connect to the database", false));
-        result.add(new SimplePropertyDescription(connectionPropertiesProp, "Extra connection properties that will be used to connect to the database", true, false, new String[0], null, PropertyEditor.TEXT_AREA));
-        result.add(new SimplePropertyDescription(userNameProp, "The user name to connect with", false));
-        result.add(new SimplePropertyDescription(passwordProp, "The password to connect with", false, true));
-        result.add(new SimplePropertyDescription(schemaPatternProp, "A schema name pattern; must match the schema name as it is stored in the database; \"\" retrieves those without a schema; empty means that the schema name should not be used to narrow the search for the table", true));
-        result.add(new SimplePropertyDescription(tableNameProp, "The name of the table to read from", false));
-        result.add(new SimplePropertyDescription(incrementingColumnNameProp, "The name of the column which has an incrementing value to be used to load data sequentially", true));
-        result.add(new SimplePropertyDescription(timestampColumnsProp, "Comma separated list of timestamp columns to use for loading new rows. The fist non-null value will be used. At least one of the values must not be null for each row", true));
-        result.add(new SimplePropertyDescription(readDelayProp, "How long (in seconds) to wait before reading rows based on their timestamp. This allows waiting for all transactions of a certain timestamp to complete to avoid loading partial data. Default value is 0", true));
-        result.add(new SimplePropertyDescription(fullLoadIntervalProp, "If set the full table will be read every configured interval (in minutes). When this is configured the update time and incrementing columns are not used.", true));
-        return result;
+        return propertyDescriptions;
     }
 
     @Override
     public DataSourceContentType getContentType() {
-        return new CSVContentType(true, ',', null, null);
+        return contentType;
     }
 
     @Override
@@ -233,7 +244,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var result = queryData(sampleMetadata, 100, connection);
         var rowReader =
                 new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result, queryDialect), sampleMetadata, connection, true);
-        var inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, true);
+        var inputStream = new ResultSetInputStream(rowConverter, rowReader, true);
         var loadedData = new LoadedData(inputStream, Instant.now());
         return CompletableFuture.completedFuture(loadedData);
     }
@@ -285,7 +296,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         var user = properties.get(userNameProp);
         var pass = properties.get(passwordProp);
         var timestampColString = properties.get(timestampColumnsProp);
-        queryDialect = QueryDialectProvider.forConnection(connectionString);
+        queryDialect = QueryDialectProvider.forConnection(connectionString, keepTypes);
         var fullLoad = !properties.getOrDefault(fullLoadIntervalProp, "0").equals("0");
         var timestampCols =
                 timestampColString != null ?
@@ -478,7 +489,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
 
                 @Override
                 public Iterator<LoadedData> loadData() {
-                    ResultSetInputStream inputStream = new ResultSetInputStream(new CsvRowConverter(tableInfo), rowReader, isLast);
+                    ResultSetInputStream inputStream = new ResultSetInputStream(rowConverter, rowReader, isLast);
                     var result = new LoadedData(inputStream, new HashMap<>(), taskRange.getInclusiveStartTime());
                     return Collections.singleton(result).iterator();
                 }

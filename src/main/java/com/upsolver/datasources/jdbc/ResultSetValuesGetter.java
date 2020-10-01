@@ -14,9 +14,10 @@ import java.util.List;
 class ResultSetValuesGetter implements AutoCloseable {
     private final TableInfo tableInfo;
     private final ResultSet underlying;
-    private final List<ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters;
+    private final ResultSetMetaData md;
+    private final List<ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
 
-    private String[] nextValues = null;
+    private Object[] nextValues = null;
     private long nextIncValue;
     private Timestamp nextTimestampValue;
     private boolean onNextValues = false;
@@ -24,7 +25,12 @@ class ResultSetValuesGetter implements AutoCloseable {
     ResultSetValuesGetter(TableInfo tableInfo, ResultSet underlying, QueryDialect queryDialect) {
         this.tableInfo = tableInfo;
         this.underlying = underlying;
-        valueGetters = initValueGetters(queryDialect);
+        try {
+            md = underlying.getMetaData();
+            valueGetters = initValueGetters(queryDialect);
+        } catch (SQLException e) {
+            throw new RuntimeException("Error while retrieving table metadata", e);
+        }
     }
 
     public boolean next() throws SQLException {
@@ -75,12 +81,13 @@ class ResultSetValuesGetter implements AutoCloseable {
         }
     }
 
-    public String[] getValues() throws SQLException {
+    public Object[] getValues() throws SQLException {
         if (nextValues != null) {
             return nextValues;
         } else {
-            var result = new String[tableInfo.getColumnCount()];
-            for (int i = 0; i < tableInfo.getColumnCount(); i++) {
+            int n = md.getColumnCount();
+            var result = new Object[n];
+            for (int i = 0; i < n; i++) {
                 result[i] = valueGetters.get(i).apply(underlying, i + 1); // Column indices start at 1 (☉_☉)
             }
             return result;
@@ -92,17 +99,12 @@ class ResultSetValuesGetter implements AutoCloseable {
         underlying.close();
     }
 
-    private List<ThrowingBiFunction<ResultSet, Integer, String, SQLException>> initValueGetters(QueryDialect queryDialect) {
-        try {
-            ResultSetMetaData md = underlying.getMetaData();
-            int n = md.getColumnCount();
-            List<ThrowingBiFunction<ResultSet, Integer, String, SQLException>> valueGetters = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                valueGetters.add(queryDialect.getStringValueGetter(md.getColumnType(i + 1)));
-            }
-            return valueGetters;
-        } catch (SQLException e) {
-            throw new RuntimeException("Error while retrieving table metadata", e);
+    private List<ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> initValueGetters(QueryDialect queryDialect) throws SQLException {
+        int n = md.getColumnCount();
+        List<ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            valueGetters.add(queryDialect.getValueGetter(md.getColumnType(i + 1)));
         }
+        return valueGetters;
     }
 }

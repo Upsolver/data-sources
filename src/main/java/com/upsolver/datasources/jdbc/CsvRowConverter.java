@@ -8,7 +8,7 @@ import java.io.OutputStream;
 
 class CsvRowConverter implements RowConverter {
 
-    private TableInfo tableInfo;
+    private final TableInfo tableInfo;
 
     CsvRowConverter(TableInfo tableInfo) {
         this.tableInfo = tableInfo;
@@ -21,7 +21,7 @@ class CsvRowConverter implements RowConverter {
 
 
     @Override
-    public void convertRow(String[] values, OutputStream os) throws IOException {
+    public void convertRow(Object[] values, OutputStream os) throws IOException {
         for (int i = 0; i < values.length; i++) {
             var value = getEscapedValue(values, i);
             os.write(value.getBytes());
@@ -29,9 +29,9 @@ class CsvRowConverter implements RowConverter {
         }
     }
 
-    private String getEscapedValue(String[] values, int i) {
-        var v =  values[i] != null ? values[i] : "";
-        if (v.contains(",")){
+    private String getEscapedValue(Object[] values, int i) {
+        var v =  values[i] != null ? values[i].toString() : "";
+        if (v.contains(",")) {
             return '"' + v.replaceAll("\"", "\"\"") + '"';
         } else {
             return v;
