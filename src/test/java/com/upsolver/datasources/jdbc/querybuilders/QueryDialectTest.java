@@ -4,8 +4,6 @@ package com.upsolver.datasources.jdbc.querybuilders;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import oracle.jdbc.OracleType;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -17,7 +15,6 @@ import org.testcontainers.containers.OracleContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.JDBCType;
 import java.sql.SQLException;
 import java.sql.SQLType;
@@ -32,11 +29,11 @@ import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
 public class QueryDialectTest {
-    private SQLType[] timestampTypes = new SQLType[] {JDBCType.DATE, JDBCType.TIMESTAMP, JDBCType.TIMESTAMP_WITH_TIMEZONE};
-    @ClassRule public static JdbcDatabaseContainer<?> mysql = new MySQLContainer<>("mysql:5.7.22"); //.withCommand("create table test (id int, ts timestamp, text varchar(16))");
-    @ClassRule public static JdbcDatabaseContainer<?> postgresql = new PostgreSQLContainer<>("postgres:9.6.12");
-    @ClassRule public static JdbcDatabaseContainer<?> sqlserver = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2017-CU12");
-    @ClassRule public static JdbcDatabaseContainer<?> oracle = new OracleContainer("oracleinanutshell/oracle-xe-11g:1.0.0");
+    private static final SQLType[] timestampTypes = new SQLType[] {JDBCType.DATE, JDBCType.TIMESTAMP, JDBCType.TIMESTAMP_WITH_TIMEZONE};
+    @ClassRule public static final JdbcDatabaseContainer<?> mysql = new MySQLContainer<>("mysql:5.7.22"); //.withCommand("create table test (id int, ts timestamp, text varchar(16))");
+    @ClassRule public static final JdbcDatabaseContainer<?> postgresql = new PostgreSQLContainer<>("postgres:9.6.12");
+    @ClassRule public static final JdbcDatabaseContainer<?> sqlserver = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2017-CU12");
+    @ClassRule public static final JdbcDatabaseContainer<?> oracle = new OracleContainer("oracleinanutshell/oracle-xe-11g:1.0.0");
 
 
     private final String url;
@@ -58,7 +55,6 @@ public class QueryDialectTest {
     @Parameterized.Parameters(name = "{0}")
     public static Collection<?> primeNumbers() {
         int offset = TimeZone.getDefault().getRawOffset() / 1000;
-//        int offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000;
         return Arrays.asList(new Object[][] {
                 { "jdbc:mysql://host", 0L, false, true, new SQLType[0], null},
                 { "jdbc:postgresql://host", offset, false, false, new SQLType[0], "org.postgresql.Driver" },
@@ -68,7 +64,7 @@ public class QueryDialectTest {
     }
 
     @Test
-    public void overriders() throws SQLException, ReflectiveOperationException, IOException, InterruptedException {
+    public void overriders() throws SQLException, ReflectiveOperationException {
         QueryDialect dialect = QueryDialectProvider.forConnection(url);
         String dbName = url.split(":")[1];
         JdbcDatabaseContainer<?> container = (JdbcDatabaseContainer<?>)getClass().getField(dbName).get(null);

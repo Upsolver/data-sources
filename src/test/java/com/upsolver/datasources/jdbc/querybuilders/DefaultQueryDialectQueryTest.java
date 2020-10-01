@@ -103,14 +103,14 @@ public class DefaultQueryDialectQueryTest {
 
     @Test
     public void queryByTime() throws SQLException, ParseException {
-        DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+//        DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         queryByTime(fmt.parse("2020-09-29 09:03:00").toInstant(), fmt.parse("2020-09-29 09:06:00").toInstant(), Arrays.asList("three", "four", "five"));
     }
 
 
     @Test
     public void queryByIncAndTimeLimitByTime() throws SQLException, ParseException {
-        DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+//        DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
         queryByIncAndTime(0, 100, fmt.parse("2020-09-29 09:03:00").toInstant(), fmt.parse("2020-09-29 09:06:00").toInstant(), Arrays.asList("three", "four", "five"));
     }
 

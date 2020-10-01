@@ -9,8 +9,7 @@ public class RedshiftQueryDialect extends DefaultQueryDialect {
     public long utcOffsetSeconds(Connection connection) throws SQLException {
         var rs = connection.prepareStatement("select current_setting('TIMEZONE')").executeQuery();
         rs.next();
-        return TimeZone.getDefault().getRawOffset() / 1000;
-//        return TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000;
+        return TimeZone.getTimeZone(rs.getString(1)).getRawOffset() / 1000;
     }
 
     @Override
