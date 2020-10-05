@@ -40,7 +40,7 @@ public class DefaultQueryDialect implements QueryDialect {
     protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTime = (rs, i) -> rs.getTime(i).getTime();
     protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTimestamp = (rs, i) -> rs.getTimestamp(i).getTime();
 
-    protected static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> dateTimeGetters = new HashMap<>();
+    private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> dateTimeGetters = new HashMap<>();
     static {
         dateTimeGetters.put(Types.DATE, getDate);
         dateTimeGetters.put(Types.TIME, getTime);
@@ -49,16 +49,16 @@ public class DefaultQueryDialect implements QueryDialect {
         dateTimeGetters.put(Types.TIMESTAMP_WITH_TIMEZONE, getTimestamp);
     }
 
-    private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
-    private final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter;
+    private Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
+    private ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter;
 
-    public DefaultQueryDialect(boolean keepType) {
-        this(keepType ? dateTimeGetters : Collections.emptyMap(), keepType ? getObject : getString);
+
+    public DefaultQueryDialect() {
+        this(false);
     }
 
-    protected DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters, ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter) {
-        this.valueGetters = valueGetters;
-        this.defaultValueGetter = defaultValueGetter;
+    public DefaultQueryDialect(boolean keepType) {
+        keepTypes(keepType);
     }
 
     @Override
@@ -286,5 +286,22 @@ public class DefaultQueryDialect implements QueryDialect {
     @Override
     public boolean acceptsURL(String url) {
         return url.startsWith("jdbc:");
+    }
+
+    @Override
+    public QueryDialect keepTypes(boolean keepTypes) {
+        if (keepTypes) {
+            keepTypes(dateTimeGetters, getObject);
+        } else {
+            keepTypes(Collections.emptyMap(), getString);
+        }
+        return this;
+    }
+
+    protected final void keepTypes(
+            Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters,
+            ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter) {
+        this.valueGetters = valueGetters;
+        this.defaultValueGetter = defaultValueGetter;
     }
 }

@@ -6,8 +6,8 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class RedshiftQueryDialect extends DefaultQueryDialect {
-    public RedshiftQueryDialect(boolean keepType) {
-        super(keepType);
+    public RedshiftQueryDialect() {
+        super(false);
     }
 
     public long utcOffsetSeconds(Connection connection) throws SQLException {

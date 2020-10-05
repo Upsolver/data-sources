@@ -72,7 +72,7 @@ public interface QueryDialect {
 
     ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getValueGetter(int sqlType);
 
-    ThrowingBiFunction<ResultSet, Integer, String, SQLException> getStringValueGetter(int sqlType);
-
     boolean acceptsURL(String url);
+
+    QueryDialect keepTypes(boolean keepType);
 }

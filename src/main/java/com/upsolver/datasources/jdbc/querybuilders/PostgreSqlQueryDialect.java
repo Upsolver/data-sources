@@ -6,8 +6,8 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class PostgreSqlQueryDialect extends DefaultQueryDialect {
-    public PostgreSqlQueryDialect(boolean keepType) {
-        super(keepType);
+    public PostgreSqlQueryDialect() {
+        super(false);
     }
 
     public long utcOffsetSeconds(Connection connection) throws SQLException {
