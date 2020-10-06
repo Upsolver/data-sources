@@ -36,7 +36,6 @@ dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
     implementation 'com.upsolver:data-sources-interfaces:1.0.7'
 
-
     implementation group: 'com.amazon.redshift', name: 'redshift-jdbc42', version: '1.2.1.1001'
     implementation "mysql:mysql-connector-java:8.0.14"
     implementation "com.oracle.ojdbc:ojdbc8:19.3.0.0"

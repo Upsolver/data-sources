@@ -6,8 +6,8 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class PostgreSqlQueryDialect extends DefaultQueryDialect {
-    public PostgreSqlQueryDialect(boolean keepType) {
-        super(keepType);
+    public PostgreSqlQueryDialect() {
+        super(false);
     }
 
     public long utcOffsetSeconds(Connection connection) throws SQLException {
@@ -26,5 +26,10 @@ public class PostgreSqlQueryDialect extends DefaultQueryDialect {
     @Override
     public String getDriverClassName() {
         return "org.postgresql.Driver";
+    }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:postgresql:");
     }
 }

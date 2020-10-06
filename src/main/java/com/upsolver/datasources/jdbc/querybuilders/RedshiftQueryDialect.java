@@ -6,8 +6,8 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class RedshiftQueryDialect extends DefaultQueryDialect {
-    public RedshiftQueryDialect(boolean keepType) {
-        super(keepType);
+    public RedshiftQueryDialect() {
+        super(false);
     }
 
     public long utcOffsetSeconds(Connection connection) throws SQLException {
@@ -21,5 +21,10 @@ public class RedshiftQueryDialect extends DefaultQueryDialect {
         var def = columnsResultSet.getString("COLUMN_DEF");
         // Example default value: "identity"(707455, 0, '1,1'::text)
         return def != null && def.startsWith("\"identity\"(");
+    }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:redshift:");
     }
 }

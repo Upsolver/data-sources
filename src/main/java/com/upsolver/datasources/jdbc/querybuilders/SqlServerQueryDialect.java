@@ -22,8 +22,8 @@ public class SqlServerQueryDialect extends DefaultQueryDialect {
     private static final Collection<SQLType> sqlServerTimeTypes = sqlServerTypes.values().stream()
             .filter(f -> sqlServerTimeTypeCodes.contains(f.getVendorTypeNumber())).collect(Collectors.toSet());
 
-    public SqlServerQueryDialect(boolean keepType) {
-        super(keepType);
+    public SqlServerQueryDialect() {
+        super(false);
     }
 
     @Override
@@ -60,5 +60,10 @@ public class SqlServerQueryDialect extends DefaultQueryDialect {
         } catch (IllegalAccessException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:sqlserver:");
     }
 }

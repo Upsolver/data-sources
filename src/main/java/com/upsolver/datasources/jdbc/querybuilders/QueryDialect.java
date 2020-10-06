@@ -71,4 +71,8 @@ public interface QueryDialect {
     String getDriverClassName();
 
     ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getValueGetter(int sqlType);
+
+    boolean acceptsURL(String url);
+
+    QueryDialect keepTypes(boolean keepType);
 }

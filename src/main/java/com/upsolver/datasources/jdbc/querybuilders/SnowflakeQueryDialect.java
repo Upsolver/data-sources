@@ -5,8 +5,8 @@ import java.sql.SQLException;
 import java.util.TimeZone;
 
 public class SnowflakeQueryDialect extends DefaultQueryDialect {
-    public SnowflakeQueryDialect(boolean keepType) {
-        super(keepType);
+    public SnowflakeQueryDialect() {
+        super(false);
     }
 
     public long utcOffsetSeconds(Connection connection) throws SQLException {
@@ -18,5 +18,10 @@ public class SnowflakeQueryDialect extends DefaultQueryDialect {
     @Override
     public boolean requiresUppercaseNames() {
         return true;
+    }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:snowflake:");
     }
 }

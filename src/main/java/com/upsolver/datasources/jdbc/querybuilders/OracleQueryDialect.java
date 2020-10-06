@@ -25,7 +25,7 @@ public class OracleQueryDialect extends DefaultQueryDialect {
             OracleType.TIMESTAMP_WITH_LOCAL_TIME_ZONE
     ));
 
-    private static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> blobAsString = (rs, i) -> Optional.ofNullable(rs.getBytes(i)).map(bytes -> new BigInteger(1, bytes).toString(16)).orElse(null);
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> blobAsString = (rs, i) -> Optional.ofNullable(rs.getBytes(i)).map(bytes -> new BigInteger(1, bytes).toString(16)).orElse(null);
     private static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> getters = new HashMap<>();
     static {
         getters.put(Types.DATE, getDate);
@@ -39,8 +39,8 @@ public class OracleQueryDialect extends DefaultQueryDialect {
         getters.put(Types.BLOB, blobAsString);
     }
 
-    public OracleQueryDialect(boolean keepType) {
-        super(keepType ? getters : Collections.emptyMap(), keepType ? getObject : getString);
+    public OracleQueryDialect() {
+        super(false);
     }
 
     @Override
@@ -107,5 +107,20 @@ public class OracleQueryDialect extends DefaultQueryDialect {
             }
         }
         return sqlType;
+    }
+
+    @Override
+    public boolean acceptsURL(String url) {
+        return url.startsWith("jdbc:oracle:");
+    }
+
+    @Override
+    public QueryDialect keepTypes(boolean keepTypes) {
+        if (keepTypes) {
+            keepTypes(getters, getObject);
+        } else {
+            keepTypes(Collections.emptyMap(), getString);
+        }
+        return this;
     }
 }
