@@ -181,6 +181,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     public Instant getStartTime() {
         if (isFullLoad()) {
             return Instant.now().minus(fullLoadIntervalMinutes, ChronoUnit.MINUTES);
+        } else if (tableInfo.hasTimeColumns()) {
+            try {
+                return queryDialect.getStartTime(tableInfo, getConnection());
+            } catch (SQLException error) {
+                logger.error("Error while getting start time, returning null (start from now)", error);
+                return null;
+            }
         } else {
             return null;
         }
@@ -240,7 +247,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         JDBCTaskMetadata sampleMetadata =
                 new JDBCTaskMetadata(0L, Long.MAX_VALUE, Instant.EPOCH, toQueryTime(Instant.now()));
         Connection connection = getConnection();
-        var result = queryData(sampleMetadata, 100, connection);
+        var result = queryData(sampleMetadata, 100, connection, true);
         var rowReader =
                 new RowReader(tableInfo, new ResultSetValuesGetter(tableInfo, result, queryDialect), sampleMetadata, connection, true);
         var inputStream = new ResultSetInputStream(rowConverter, rowReader, true);
@@ -264,9 +271,9 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return time.minusSeconds(dbTimezoneOffset);
     }
 
-    private ResultSet queryData(JDBCTaskMetadata metadata, int limit, Connection connection) {
+    private ResultSet queryData(JDBCTaskMetadata metadata, int limit, Connection connection, boolean isSample) {
         try {
-            if (isFullLoad()) {
+            if (isSample || isFullLoad()) {
                 return queryDialect.queryFullTable(tableInfo, metadata, limit, connection).executeQuery();
             } else if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
@@ -410,7 +417,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     firstMetadata.getStartTime(), lastMetadata.getEndTime())
                     .adjustWithDelay(dbTimezoneOffset);
             var connection = getConnection();
-            var resultSet = queryData(queryMetadata, -1, connection);
+            var resultSet = queryData(queryMetadata, -1, connection, false);
             return splitData(resultSet, wantedRanges, runMetadatas, connection);
         }
     }
