@@ -1,5 +1,8 @@
 package com.upsolver.datasources.jdbc.utils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.sql.*;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,11 +15,14 @@ import java.util.regex.Pattern;
 
 import static java.sql.ResultSet.TYPE_SCROLL_INSENSITIVE;
 
+
 public class NamedPreparedStatment implements AutoCloseable {
+    private static final Logger logger = LoggerFactory.getLogger(NamedPreparedStatment.class);
+
     static final private Pattern namedVariable = Pattern.compile(":(\\w+)");
 
-    private PreparedStatement prepStmt;
-    private Map<String, List<Integer>> fields = new HashMap<>();
+    private final PreparedStatement prepStmt;
+    private final Map<String, List<Integer>> fields = new HashMap<>();
 
     public NamedPreparedStatment(Connection conn, String sql) throws SQLException {
         var finalSql = namedVariable.matcher(sql).replaceAll(new Function<>() {
@@ -38,6 +44,7 @@ public class NamedPreparedStatment implements AutoCloseable {
 
 
     public ResultSet executeQuery() throws SQLException {
+        logger.debug("Executing query: " + prepStmt.toString());
         return prepStmt.executeQuery();
     }
 

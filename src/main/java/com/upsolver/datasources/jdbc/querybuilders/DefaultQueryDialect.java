@@ -17,6 +17,7 @@ import java.sql.SQLException;
 import java.sql.SQLType;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -68,6 +69,19 @@ public class DefaultQueryDialect implements QueryDialect {
         return rs.getTime(1).getTime() / 1000;
     }
 
+    @Override
+    public Instant getStartTime(TableInfo tableInfo, Connection connection) throws SQLException {
+        String coalescedTimes = coalesceTimeColumns(tableInfo);
+        String query = "SELECT MIN(" + coalescedTimes + ") AS min_time" +
+                " FROM " + fullTableName(tableInfo);
+        var rs = connection.prepareStatement(query).executeQuery();
+        if (rs.next()) {
+            var ts = rs.getTimestamp("min_time");
+            return ts != null ? ts.toInstant().truncatedTo(ChronoUnit.MINUTES) : null;
+        } else {
+            return null;
+        }
+    }
 
     @Override
     public NamedPreparedStatment taskInfoByInc(TableInfo tableInfo,

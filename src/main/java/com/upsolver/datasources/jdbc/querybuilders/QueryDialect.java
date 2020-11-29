@@ -23,6 +23,8 @@ public interface QueryDialect {
     boolean isAutoIncrementColumn(ResultSet columnsResultSet) throws SQLException;
 
     boolean isTimeType(SQLType sqlType) throws SQLException;
+    
+    Instant getStartTime(TableInfo tableInfo, Connection connection) throws SQLException;
 
     SQLType getSqlType(int code) throws SQLException;
 
