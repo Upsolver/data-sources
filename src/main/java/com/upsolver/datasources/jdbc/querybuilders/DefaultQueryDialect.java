@@ -8,22 +8,10 @@ import com.upsolver.datasources.jdbc.utils.ThrowingBiFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.JDBCType;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.SQLType;
-import java.sql.Types;
+import java.sql.*;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 public class DefaultQueryDialect implements QueryDialect {
     private static final Logger logger = LoggerFactory.getLogger(DefaultQueryDialect.class);
@@ -37,11 +25,21 @@ public class DefaultQueryDialect implements QueryDialect {
 
     protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getObject = ResultSet::getObject;
     protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getString = ResultSet::getString;
-    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getDate = (rs, i) -> rs.getDate(i).getTime();
-    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTime = (rs, i) -> rs.getTime(i).getTime();
-    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTimestamp = (rs, i) -> rs.getTimestamp(i).getTime();
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getDate = (rs, i) -> {
+        var ts = rs.getDate(i);
+        return ts != null ? ts.getTime() : null;
+    };
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTime = (rs, i) -> {
+        var ts = rs.getTime(i);
+        return ts != null ? ts.getTime() : null;
+    };
+    protected static final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> getTimestamp = (rs, i) -> {
+        var ts = rs.getTimestamp(i);
+        return ts != null ? ts.getTime() : null;
+    };
 
     protected static final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> dateTimeGetters = new HashMap<>();
+
     static {
         dateTimeGetters.put(Types.DATE, getDate);
         dateTimeGetters.put(Types.TIME, getTime);
@@ -274,7 +272,7 @@ public class DefaultQueryDialect implements QueryDialect {
 
     @Override
     public String fullTableName(TableInfo tableInfo) {
-        if(tableInfo.getSchema() != null  && !tableInfo.getSchema().isEmpty()){
+        if (tableInfo.getSchema() != null && !tableInfo.getSchema().isEmpty()) {
             return tableInfo.getSchema() + "." + tableInfo.getName();
         } else {
             return tableInfo.getName();
