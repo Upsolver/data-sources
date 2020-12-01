@@ -12,7 +12,11 @@ public class ResultSetInputStream extends InputStream {
     private byte[] buffer;
     private int position;
     private boolean wroteHeader = false;
-    private boolean closeStream;
+
+    // If we had an error we close the stream regardless of the passed closeStream value
+    private boolean hadError = false;
+    private final boolean closeStream;
+
 
     public ResultSetInputStream(RowConverter rowConverter, RowReader rowReader, boolean closeStream) {
         this.rowConverter = rowConverter;
@@ -21,23 +25,28 @@ public class ResultSetInputStream extends InputStream {
     }
 
     private boolean ensureBuffer() throws SQLException, IOException {
-        if (buffer != null && position < buffer.length) {
-            return true;
-        } else {
-            if (rowReader.next()) {
-                var byteArrayOutputStream = new ByteArrayOutputStream();
-                if (!wroteHeader && rowConverter.hasHeader()) {
-                    rowConverter.writeHeader(byteArrayOutputStream);
-                    wroteHeader = true;
-                }
-                Object[] values = rowReader.getValues();
-                rowConverter.convertRow(values, byteArrayOutputStream);
-                byteArrayOutputStream.close();
-                position = 0;
-                buffer = byteArrayOutputStream.toByteArray();
+        try {
+            if (buffer != null && position < buffer.length) {
                 return true;
+            } else {
+                if (rowReader.next()) {
+                    var byteArrayOutputStream = new ByteArrayOutputStream();
+                    if (!wroteHeader && rowConverter.hasHeader()) {
+                        rowConverter.writeHeader(byteArrayOutputStream);
+                        wroteHeader = true;
+                    }
+                    Object[] values = rowReader.getValues();
+                    rowConverter.convertRow(values, byteArrayOutputStream);
+                    byteArrayOutputStream.close();
+                    position = 0;
+                    buffer = byteArrayOutputStream.toByteArray();
+                    return true;
+                }
+                return false;
             }
-            return false;
+        } catch (Exception e) {
+            hadError = true;
+            throw e;
         }
     }
 
@@ -84,7 +93,7 @@ public class ResultSetInputStream extends InputStream {
     @Override
     public void close() throws IOException {
         try {
-            if (closeStream) {
+            if (hadError || closeStream) {
                 rowReader.close();
             }
         } catch (Exception e) {
