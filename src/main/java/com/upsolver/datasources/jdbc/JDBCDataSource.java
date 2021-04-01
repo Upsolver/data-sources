@@ -395,12 +395,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return result;
     }
 
-
     @Override
     public CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> getDataLoaders(TaskInformation<JDBCTaskMetadata> taskInfo,
                                                                                   List<TaskRange> completedRanges,
                                                                                   List<TaskRange> wantedRanges,
+                                                                                  Optional<JDBCTaskMetadata> optional,
                                                                                   ShardDefinition shardDefinition) {
+
         var taskCount = completedRanges.size() + wantedRanges.size();
         var itemsPerTask = (taskInfo.getMetadata().itemsPerTask(taskCount));
         var emptyFullLoad = isFullLoad() && wantedRanges.stream().noneMatch(this::matchesLoadInterval);
