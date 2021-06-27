@@ -224,8 +224,14 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 var sqlType = queryDialect.getSqlType(type);
                 columns.add(new ColumnInfo(colName, sqlType, queryDialect.isAutoIncrementColumn(columnRs), queryDialect.isTimeType(sqlType)));
             }
+            var result = new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
 
-            return new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
+            if (logger.isDebugEnabled()) {
+                logger.debug("Loading table info: " + result);
+            }
+
+            return result;
+
         } else {
             throw new IllegalArgumentException("Could not find table with name: " + fixedTableName);
         }
