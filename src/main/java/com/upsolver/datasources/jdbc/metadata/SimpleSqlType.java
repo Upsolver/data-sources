@@ -27,4 +27,13 @@ public class SimpleSqlType implements SQLType {
     public Integer getVendorTypeNumber() {
         return vendorType;
     }
+
+    @Override
+    public String toString() {
+        return "SimpleSqlType{" +
+                "name='" + name + '\'' +
+                ", vendor='" + vendor + '\'' +
+                ", vendorType=" + vendorType +
+                '}';
+    }
 }

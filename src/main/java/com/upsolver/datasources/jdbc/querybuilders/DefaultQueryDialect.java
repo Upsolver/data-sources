@@ -48,11 +48,20 @@ public class DefaultQueryDialect implements QueryDialect {
         dateTimeGetters.put(Types.TIMESTAMP_WITH_TIMEZONE, getTimestamp);
     }
 
-    private final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
+    protected final Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters;
     private final ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter;
 
-    public DefaultQueryDialect(boolean keepType) {
-        this(keepType ? dateTimeGetters : Collections.emptyMap(), keepType ? getObject : getString);
+    public DefaultQueryDialect(boolean keepType, Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> additionalGetters) {
+        this(getAllGetters(keepType, additionalGetters), keepType ? getObject : getString);
+    }
+
+    private static Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> getAllGetters(boolean keepType, Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> additionalGetters) {
+        Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> allGetters = new java.util.HashMap();
+        if (keepType) {
+            allGetters.putAll(dateTimeGetters);
+        }
+        allGetters.putAll(additionalGetters);
+        return allGetters;
     }
 
     protected DefaultQueryDialect(Map<Integer, ThrowingBiFunction<ResultSet, Integer, Object, SQLException>> valueGetters, ThrowingBiFunction<ResultSet, Integer, Object, SQLException> defaultValueGetter) {

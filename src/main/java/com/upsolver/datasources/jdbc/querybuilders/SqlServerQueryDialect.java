@@ -8,11 +8,7 @@ import java.sql.Connection;
 import java.sql.JDBCType;
 import java.sql.SQLException;
 import java.sql.SQLType;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class SqlServerQueryDialect extends DefaultQueryDialect {
@@ -23,7 +19,7 @@ public class SqlServerQueryDialect extends DefaultQueryDialect {
             .filter(f -> sqlServerTimeTypeCodes.contains(f.getVendorTypeNumber())).collect(Collectors.toSet());
 
     public SqlServerQueryDialect(boolean keepType) {
-        super(keepType);
+        super(keepType, Collections.emptyMap());
     }
 
     @Override

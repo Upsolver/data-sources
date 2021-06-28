@@ -31,4 +31,14 @@ public class ColumnInfo {
     public boolean isIncCol() {
         return isIncCol;
     }
+
+    @Override
+    public String toString() {
+        return "ColumnInfo{" +
+                "name='" + name + '\'' +
+                ", type=" + type +
+                ", isIncCol=" + isIncCol +
+                ", isTimeType=" + isTimeType +
+                '}';
+    }
 }

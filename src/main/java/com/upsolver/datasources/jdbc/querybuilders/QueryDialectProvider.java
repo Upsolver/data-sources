@@ -1,5 +1,7 @@
 package com.upsolver.datasources.jdbc.querybuilders;
 
+import java.util.Collections;
+
 public class QueryDialectProvider {
 
     public static QueryDialect forConnection(String connectionString, boolean keepTypes) {
@@ -15,6 +17,6 @@ public class QueryDialectProvider {
         } else if (connStr.startsWith("jdbc:snowflake")) {
             return new SnowflakeQueryDialect(keepTypes);
         }
-        return new DefaultQueryDialect(keepTypes);
+        return new DefaultQueryDialect(keepTypes, Collections.emptyMap());
     }
 }

@@ -224,8 +224,14 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                 var sqlType = queryDialect.getSqlType(type);
                 columns.add(new ColumnInfo(colName, sqlType, queryDialect.isAutoIncrementColumn(columnRs), queryDialect.isTimeType(sqlType)));
             }
+            var result = new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
 
-            return new TableInfo(catalog, schema, dbTableName, columns.toArray(ColumnInfo[]::new));
+            if (logger.isDebugEnabled()) {
+                logger.debug("Loading table info: " + result);
+            }
+
+            return result;
+
         } else {
             throw new IllegalArgumentException("Could not find table with name: " + fixedTableName);
         }
@@ -395,12 +401,13 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
         return result;
     }
 
-
     @Override
     public CompletionStage<Iterator<DataLoader<JDBCTaskMetadata>>> getDataLoaders(TaskInformation<JDBCTaskMetadata> taskInfo,
                                                                                   List<TaskRange> completedRanges,
                                                                                   List<TaskRange> wantedRanges,
+                                                                                  Optional<JDBCTaskMetadata> optional,
                                                                                   ShardDefinition shardDefinition) {
+
         var taskCount = completedRanges.size() + wantedRanges.size();
         var itemsPerTask = (taskInfo.getMetadata().itemsPerTask(taskCount));
         var emptyFullLoad = isFullLoad() && wantedRanges.stream().noneMatch(this::matchesLoadInterval);

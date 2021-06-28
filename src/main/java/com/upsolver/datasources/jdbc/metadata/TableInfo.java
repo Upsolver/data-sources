@@ -19,6 +19,18 @@ public class TableInfo {
         this.columns = columns;
     }
 
+    @Override
+    public String toString() {
+        return "TableInfo{" +
+                "catalog='" + catalog + '\'' +
+                ", schema='" + schema + '\'' +
+                ", name='" + name + '\'' +
+                ", incColumn='" + incColumn + '\'' +
+                ", columns=" + Arrays.toString(columns) +
+                ", timeColumns=" + Arrays.toString(timeColumns) +
+                '}';
+    }
+
     public String getSchema() {
         return schema;
     }
