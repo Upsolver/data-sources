@@ -15,11 +15,9 @@ import java.util.*;
 
 public class DefaultQueryDialect implements QueryDialect {
     private static final Logger logger = LoggerFactory.getLogger(DefaultQueryDialect.class);
-    private static final Collection<SQLType> timeTypes = new HashSet<>(Arrays.asList(
+    private static final Collection<SQLType> timeStampTypes = new HashSet<>(Arrays.asList(
             JDBCType.DATE,
             JDBCType.TIMESTAMP,
-            JDBCType.TIME,
-            JDBCType.TIME_WITH_TIMEZONE,
             JDBCType.TIMESTAMP_WITH_TIMEZONE
     ));
 
@@ -252,7 +250,7 @@ public class DefaultQueryDialect implements QueryDialect {
 
     @Override
     public boolean isTimeType(SQLType sqlType) throws SQLException {
-        return timeTypes.contains(getJdbcType(sqlType));
+        return timeStampTypes.contains(getJdbcType(sqlType));
     }
 
     @Override
