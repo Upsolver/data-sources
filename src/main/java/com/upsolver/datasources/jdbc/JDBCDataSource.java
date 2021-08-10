@@ -48,6 +48,7 @@ import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.upsolver.datasources.jdbc.utils.MarkdownEscaper.escape;
@@ -85,6 +86,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     new SimplePropertyDescription(fullLoadIntervalProp, "If set the full table will be read every configured interval (in minutes). When this is configured the update time and incrementing columns are not used.", true),
                     new SimplePropertyDescription(keepSourceTypes, "Keep original data types from source to use string representation", true, false, null, null, null, true, Optional.of("true")));
 
+    private Optional<Integer> fetchSize;
     private long readDelay;
     private long fullLoadIntervalMinutes;
     private TableInfo tableInfo;
@@ -125,6 +127,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
             Properties props = new Properties();
             try {
                 props.load(new StringReader(connectionProperties));
+                fetchSize = Optional.ofNullable(props.getProperty("upsolver.fetchSize")).map(Integer::parseInt);
                 ds.setDataSourceProperties(props);
             } catch (IOException e) {
                 logger.error("Unable to parse connection properties", e);
@@ -280,15 +283,15 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
     private ResultSet queryData(JDBCTaskMetadata metadata, int limit, Connection connection, boolean isSample) {
         try {
             if (isSample || isFullLoad()) {
-                return queryDialect.queryFullTable(tableInfo, metadata, limit, connection).executeQuery();
+                return queryDialect.queryFullTable(tableInfo, metadata, limit, connection).setFetchSize(fetchSize).executeQuery();
             } else if (tableInfo.hasTimeColumns()) {
                 if (tableInfo.getIncColumn() != null) {
-                    return queryDialect.queryByIncAndTime(tableInfo, metadata, limit, connection).executeQuery();
+                    return queryDialect.queryByIncAndTime(tableInfo, metadata, limit, connection).setFetchSize(fetchSize).executeQuery();
                 } else {
-                    return this.queryDialect.queryByTime(this.tableInfo, metadata, limit, connection).executeQuery();
+                    return this.queryDialect.queryByTime(this.tableInfo, metadata, limit, connection).setFetchSize(fetchSize).executeQuery();
                 }
             } else {
-                return queryDialect.queryByInc(tableInfo, metadata, limit, connection).executeQuery();
+                return queryDialect.queryByInc(tableInfo, metadata, limit, connection).setFetchSize(fetchSize).executeQuery();
             }
         } catch (Exception e) {
             try {

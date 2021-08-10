@@ -5,10 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
 import java.util.regex.MatchResult;
 import java.util.regex.Pattern;
@@ -82,4 +79,10 @@ public class NamedPreparedStatment implements AutoCloseable {
         return fields.getOrDefault(name, new ArrayList<>());
     }
 
+    public NamedPreparedStatment setFetchSize(Optional<Integer> fetchSize) throws SQLException {
+        if (fetchSize.isPresent()) {
+            prepStmt.setFetchSize(fetchSize.get());
+        }
+        return this;
+    }
 }
