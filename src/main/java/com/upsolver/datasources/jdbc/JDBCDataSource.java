@@ -86,7 +86,7 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                     new SimplePropertyDescription(fullLoadIntervalProp, "If set the full table will be read every configured interval (in minutes). When this is configured the update time and incrementing columns are not used.", true),
                     new SimplePropertyDescription(keepSourceTypes, "Keep original data types from source to use string representation", true, false, null, null, null, true, Optional.of("true")));
 
-    private Optional<Integer> fetchSize;
+    private Optional<Integer> fetchSize = Optional.empty();
     private long readDelay;
     private long fullLoadIntervalMinutes;
     private TableInfo tableInfo;
