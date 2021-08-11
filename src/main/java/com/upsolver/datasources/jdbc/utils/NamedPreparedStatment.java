@@ -81,6 +81,7 @@ public class NamedPreparedStatment implements AutoCloseable {
 
     public NamedPreparedStatment setFetchSize(Optional<Integer> fetchSize) throws SQLException {
         if (fetchSize.isPresent()) {
+            prepStmt.getConnection().setAutoCommit(false);
             prepStmt.setFetchSize(fetchSize.get());
         }
         return this;
