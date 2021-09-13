@@ -539,22 +539,27 @@ public class JDBCDataSource implements ExternalDataSource<JDBCTaskMetadata, JDBC
                                                                           ShardDefinition shardDefinition) {
         var previous = previousTaskMetadata != null ?
                 previousTaskMetadata : new JDBCTaskMetadata(0, 0);
-        var startFrom = previous.getExclusiveEnd();
-        try (var connection = getConnection(); var statement = getTaskInfoQuery(previous, taskRange, connection)) {
-            var rs = statement.executeQuery();
-            if (rs.next()) {
-                var max = tableInfo.hasIncColumn() ? rs.getLong("MAX") : 0;
-                var min = tableInfo.hasIncColumn() ? rs.getLong("MIN") : 0;
-                var endTime = tableInfo.hasTimeColumns() ? taskRange.getExclusiveEndTime() : null;
-                return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
-                        new JDBCTaskMetadata(min, max + 1, previous.getEndTime(), endTime)));
-            } else {
-                return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
-                        new JDBCTaskMetadata(startFrom, startFrom, previous.getEndTime(), previous.getEndTime())));
+        if (isFullLoad()) {
+            return CompletableFuture.completedFuture(new TaskInformation<>(taskRange, JDBCTaskMetadata.forFullLoad));
+        } else {
+            var startFrom = previous.getExclusiveEnd();
+            try (var connection = getConnection(); var statement = getTaskInfoQuery(previous, taskRange, connection)) {
+                var rs = statement.executeQuery();
+                if (rs.next()) {
+                    var max = tableInfo.hasIncColumn() ? rs.getLong("MAX") : 0;
+                    var min = tableInfo.hasIncColumn() ? rs.getLong("MIN") : 0;
+                    var endTime = tableInfo.hasTimeColumns() ? taskRange.getExclusiveEndTime() : null;
+                    return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
+                            new JDBCTaskMetadata(min, max + 1, previous.getEndTime(), endTime)));
+                } else {
+                    return CompletableFuture.completedFuture(new TaskInformation<>(taskRange,
+                            new JDBCTaskMetadata(startFrom, startFrom, previous.getEndTime(), previous.getEndTime())));
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to get task infos", e);
             }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to get task infos", e);
         }
+
     }
 
     private NamedPreparedStatment getTaskInfoQuery(JDBCTaskMetadata metadata,
