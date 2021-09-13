@@ -13,6 +13,9 @@ public class JDBCTaskMetadata implements Serializable {
     // remove a few days to avoid exceeding end in adjustments
     static final Instant initalEndTime = Instant.MAX.minus(7, ChronoUnit.DAYS);
 
+    public static final JDBCTaskMetadata forFullLoad =
+            new JDBCTaskMetadata(0, 1, null, null);
+
     private Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private long inclusiveStart;
