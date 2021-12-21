@@ -16,6 +16,8 @@ public class QueryDialectProvider {
             return new PostgreSqlQueryDialect(keepTypes);
         } else if (connStr.startsWith("jdbc:snowflake")) {
             return new SnowflakeQueryDialect(keepTypes);
+        } else if (connStr.startsWith("jdbc:mysql")) {
+            new MysqlQueryDialect(keepTypes);
         }
         return new DefaultQueryDialect(keepTypes, Collections.emptyMap());
     }
